@@ -9,7 +9,7 @@ class KeyablePanel: NSPanel {
 
 /// Controls the overlay window that displays the grid
 class OverlayWindowController: NSWindowController {
-    private var gridSize = GridSize(cols: 8, rows: 2)
+    private var gridSize: GridSize
     private var currentSelection: GridSelection?
     private var gridView: GridOverlayView?
     private let windowTiler: WindowTiler
@@ -17,11 +17,18 @@ class OverlayWindowController: NSWindowController {
     // Store reference to the window we want to tile (before overlay appears)
     private var targetWindow: WindowInfo?
 
+    // Settings observer
+    private var settingsObserver: NSObjectProtocol?
+
     init() {
+        // Initialize from settings
+        let settings = SettingsManager.shared.settings
+        self.gridSize = settings.defaultGridSize
+
         // Initialize window tiler with real window manager
         self.windowTiler = WindowTiler(windowManager: RealWindowManager.shared)
-        windowTiler.spacing = 10
-        windowTiler.insets = EdgeInsets.zero
+        windowTiler.spacing = settings.windowSpacing
+        windowTiler.insets = settings.insets
 
         // Create a panel instead of window - panels can receive keyboard input as floating windows
         let screen = NSScreen.main ?? NSScreen.screens[0]
@@ -39,23 +46,48 @@ class OverlayWindowController: NSWindowController {
         panel.ignoresMouseEvents = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.hasShadow = false
-        panel.becomesKeyOnlyIfNeeded = false  // Important: always become key
+        panel.becomesKeyOnlyIfNeeded = false
         panel.hidesOnDeactivate = false
         panel.isFloatingPanel = true
 
         super.init(window: panel)
 
         setupGridView()
+        observeSettings()
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
+    deinit {
+        if let observer = settingsObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    private func observeSettings() {
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: .settingsDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.reloadSettings()
+        }
+    }
+
+    private func reloadSettings() {
+        let settings = SettingsManager.shared.settings
+        windowTiler.spacing = settings.windowSpacing
+        windowTiler.insets = settings.insets
+        gridView?.gridPresets = settings.gridSizes
+    }
+
     private func setupGridView() {
         guard let window = window, let contentView = window.contentView else { return }
 
-        let gridView = GridOverlayView(gridSize: gridSize)
+        let settings = SettingsManager.shared.settings
+        let gridView = GridOverlayView(gridSize: gridSize, gridPresets: settings.gridSizes)
         gridView.frame = contentView.bounds
         gridView.autoresizingMask = [.width, .height]
         gridView.onSelectionConfirmed = { [weak self] selection in
@@ -90,6 +122,9 @@ class OverlayWindowController: NSWindowController {
 
     func showOverlay() {
         guard let screen = NSScreen.main else { return }
+
+        // Reload settings when showing overlay
+        reloadSettings()
 
         // IMPORTANT: Capture window BEFORE any UI changes
         targetWindow = RealWindowManager.shared.getFocusedWindow()
@@ -142,10 +177,15 @@ class OverlayWindowController: NSWindowController {
     }
 
     private func applySelection(_ selection: GridSelection) {
+        let settings = SettingsManager.shared.settings
+
         // Get reference to target window before hiding
         let windowToTile = targetWindow
 
-        hideOverlay()
+        // Only hide if auto-close is enabled
+        if settings.autoClose {
+            hideOverlay()
+        }
 
         // Check accessibility permissions first
         if !RealWindowManager.shared.hasAccessibilityPermissions() {
@@ -196,10 +236,19 @@ class OverlayWindowController: NSWindowController {
                 print("Failed to tile window - check accessibility permissions")
             }
         }
+
+        // If auto-close is disabled, reset selection for next operation
+        if !settings.autoClose {
+            gridView?.selection = GridSelection(
+                anchor: GridOffset(col: 0, row: 0),
+                target: GridOffset(col: 0, row: 0)
+            )
+        }
     }
 }
 
 /// View that displays the grid and handles keyboard input
+/// gTile-style selection: Arrow keys move first corner, Shift+Arrow moves second corner
 class GridOverlayView: NSView {
     var gridSize: GridSize {
         didSet {
@@ -218,16 +267,11 @@ class GridOverlayView: NSView {
     private var isSelecting = false
     private var selectionAnchor: GridOffset?
 
-    private let gridPresets = [
-        GridSize(cols: 8, rows: 2),
-        GridSize(cols: 6, rows: 4),
-        GridSize(cols: 4, rows: 4),
-        GridSize(cols: 3, rows: 3),
-        GridSize(cols: 2, rows: 2)
-    ]
+    var gridPresets: [GridSize]
 
-    init(gridSize: GridSize) {
+    init(gridSize: GridSize, gridPresets: [GridSize]) {
         self.gridSize = gridSize
+        self.gridPresets = gridPresets
         super.init(frame: .zero)
         wantsLayer = true
     }
@@ -308,6 +352,19 @@ class GridOverlayView: NSView {
             context.setStrokeColor(NSColor.systemBlue.cgColor)
             context.setLineWidth(3.0)
             context.stroke(CGRect(x: x, y: y, width: width, height: height))
+
+            // Draw anchor marker (first corner - smaller filled square)
+            let anchorX = CGFloat(selection.anchor.col) * cellWidth + cellWidth / 2 - 6
+            let anchorY = bounds.height - CGFloat(selection.anchor.row + 1) * cellHeight + cellHeight / 2 - 6
+            context.setFillColor(NSColor.systemGreen.cgColor)
+            context.fillEllipse(in: CGRect(x: anchorX, y: anchorY, width: 12, height: 12))
+
+            // Draw target marker (second corner - smaller hollow square)
+            let targetX = CGFloat(selection.target.col) * cellWidth + cellWidth / 2 - 6
+            let targetY = bounds.height - CGFloat(selection.target.row + 1) * cellHeight + cellHeight / 2 - 6
+            context.setStrokeColor(NSColor.systemOrange.cgColor)
+            context.setLineWidth(2.0)
+            context.strokeEllipse(in: CGRect(x: targetX, y: targetY, width: 12, height: 12))
         }
 
         // Draw grid size indicator
@@ -323,7 +380,7 @@ class GridOverlayView: NSView {
         )
 
         // Draw instructions at top
-        let instructions = "Arrow/HJKL: Move | Shift: Extend | Option: Shrink | Enter: Apply | Esc: Cancel | Space: Cycle"
+        let instructions = "Arrows/HJKL: 1st corner | Shift+Arrows: 2nd corner | Enter: Apply | Esc: Cancel | Space: Cycle grid"
         let instrAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 16, weight: .medium),
             .foregroundColor: NSColor.white
@@ -332,9 +389,9 @@ class GridOverlayView: NSView {
         let instrX = (bounds.width - instrSize.width) / 2
         instructions.draw(at: CGPoint(x: instrX, y: bounds.height - 40), withAttributes: instrAttrs)
 
-        // Draw selection info
+        // Draw selection info with corner indicators
         if let selection = selection {
-            let selInfo = "Selection: cols \(selection.normalized.anchor.col)-\(selection.normalized.target.col), rows \(selection.normalized.anchor.row)-\(selection.normalized.target.row)"
+            let selInfo = "1st: (\(selection.anchor.col),\(selection.anchor.row)) → 2nd: (\(selection.target.col),\(selection.target.row)) | Size: \(selection.width)×\(selection.height)"
             let selAttrs: [NSAttributedString.Key: Any] = [
                 .font: NSFont.monospacedSystemFont(ofSize: 14, weight: .regular),
                 .foregroundColor: NSColor.white.withAlphaComponent(0.8)
@@ -352,54 +409,24 @@ class GridOverlayView: NSView {
         }
 
         let shift = event.modifierFlags.contains(.shift)
-        let option = event.modifierFlags.contains(.option)
 
-        // Determine mode: Option = shrink, Shift = extend, neither = pan
-        let mode: AdjustMode? = option ? .shrink : (shift ? .extend : nil)
+        // gTile-style selection:
+        // - Without Shift: move anchor (first corner)
+        // - With Shift: move target (second corner)
 
-        // Handle by character for HJKL (more reliable than key codes)
+        var direction: Direction?
+
+        // Handle by character for HJKL
         if let chars = event.charactersIgnoringModifiers?.lowercased() {
             switch chars {
             case "h":
-                if let mode = mode {
-                    // For shrink, reverse direction: Option+H shrinks RIGHT edge
-                    let dir: Direction = (mode == .shrink) ? .right : .left
-                    currentSelection = GridOperations.adjust(selection: currentSelection, direction: dir, mode: mode, gridSize: gridSize)
-                } else {
-                    currentSelection = GridOperations.pan(selection: currentSelection, direction: .left, gridSize: gridSize)
-                }
-                selection = currentSelection
-                return
+                direction = .left
             case "l":
-                if let mode = mode {
-                    // For shrink, reverse direction: Option+L shrinks LEFT edge
-                    let dir: Direction = (mode == .shrink) ? .left : .right
-                    currentSelection = GridOperations.adjust(selection: currentSelection, direction: dir, mode: mode, gridSize: gridSize)
-                } else {
-                    currentSelection = GridOperations.pan(selection: currentSelection, direction: .right, gridSize: gridSize)
-                }
-                selection = currentSelection
-                return
+                direction = .right
             case "j":
-                if let mode = mode {
-                    // For shrink, reverse direction: Option+J shrinks TOP edge
-                    let dir: Direction = (mode == .shrink) ? .up : .down
-                    currentSelection = GridOperations.adjust(selection: currentSelection, direction: dir, mode: mode, gridSize: gridSize)
-                } else {
-                    currentSelection = GridOperations.pan(selection: currentSelection, direction: .down, gridSize: gridSize)
-                }
-                selection = currentSelection
-                return
+                direction = .down
             case "k":
-                if let mode = mode {
-                    // For shrink, reverse direction: Option+K shrinks BOTTOM edge
-                    let dir: Direction = (mode == .shrink) ? .down : .up
-                    currentSelection = GridOperations.adjust(selection: currentSelection, direction: dir, mode: mode, gridSize: gridSize)
-                } else {
-                    currentSelection = GridOperations.pan(selection: currentSelection, direction: .up, gridSize: gridSize)
-                }
-                selection = currentSelection
-                return
+                direction = .up
             case " ":
                 cycleGridSize()
                 return
@@ -408,61 +435,56 @@ class GridOverlayView: NSView {
             }
         }
 
-        // Handle by key code for special keys (arrows)
-        switch event.keyCode {
-        case 123: // Left arrow
-            if let mode = mode {
-                let dir: Direction = (mode == .shrink) ? .right : .left
-                currentSelection = GridOperations.adjust(selection: currentSelection, direction: dir, mode: mode, gridSize: gridSize)
-            } else {
-                currentSelection = GridOperations.pan(selection: currentSelection, direction: .left, gridSize: gridSize)
+        // Handle by key code for arrow keys
+        if direction == nil {
+            switch event.keyCode {
+            case 123: // Left
+                direction = .left
+            case 124: // Right
+                direction = .right
+            case 125: // Down
+                direction = .down
+            case 126: // Up
+                direction = .up
+            case 36: // Enter
+                print("Enter pressed - confirming selection")
+                onSelectionConfirmed?(currentSelection)
+                return
+            case 53: // Escape
+                print("Escape pressed - cancelling")
+                onCancel?()
+                return
+            case 49: // Space
+                cycleGridSize()
+                return
+            default:
+                print("Unhandled key code: \(event.keyCode)")
+                super.keyDown(with: event)
+                return
             }
-
-        case 124: // Right arrow
-            if let mode = mode {
-                let dir: Direction = (mode == .shrink) ? .left : .right
-                currentSelection = GridOperations.adjust(selection: currentSelection, direction: dir, mode: mode, gridSize: gridSize)
-            } else {
-                currentSelection = GridOperations.pan(selection: currentSelection, direction: .right, gridSize: gridSize)
-            }
-
-        case 125: // Down arrow
-            if let mode = mode {
-                let dir: Direction = (mode == .shrink) ? .up : .down
-                currentSelection = GridOperations.adjust(selection: currentSelection, direction: dir, mode: mode, gridSize: gridSize)
-            } else {
-                currentSelection = GridOperations.pan(selection: currentSelection, direction: .down, gridSize: gridSize)
-            }
-
-        case 126: // Up arrow
-            if let mode = mode {
-                let dir: Direction = (mode == .shrink) ? .down : .up
-                currentSelection = GridOperations.adjust(selection: currentSelection, direction: dir, mode: mode, gridSize: gridSize)
-            } else {
-                currentSelection = GridOperations.pan(selection: currentSelection, direction: .up, gridSize: gridSize)
-            }
-
-        case 36: // Enter
-            print("Enter pressed - confirming selection")
-            onSelectionConfirmed?(currentSelection)
-            return
-
-        case 53: // Escape
-            print("Escape pressed - cancelling")
-            onCancel?()
-            return
-
-        case 49: // Space
-            cycleGridSize()
-            return
-
-        default:
-            print("Unhandled key code: \(event.keyCode)")
-            super.keyDown(with: event)
-            return
         }
 
-        selection = currentSelection
+        // Apply direction to either anchor or target
+        if let dir = direction {
+            if shift {
+                // Move target (second corner)
+                let newCol = max(0, min(gridSize.cols - 1, currentSelection.target.col + dir.colDelta))
+                let newRow = max(0, min(gridSize.rows - 1, currentSelection.target.row + dir.rowDelta))
+                currentSelection = GridSelection(
+                    anchor: currentSelection.anchor,
+                    target: GridOffset(col: newCol, row: newRow)
+                )
+            } else {
+                // Move anchor (first corner)
+                let newCol = max(0, min(gridSize.cols - 1, currentSelection.anchor.col + dir.colDelta))
+                let newRow = max(0, min(gridSize.rows - 1, currentSelection.anchor.row + dir.rowDelta))
+                currentSelection = GridSelection(
+                    anchor: GridOffset(col: newCol, row: newRow),
+                    target: currentSelection.target
+                )
+            }
+            selection = currentSelection
+        }
     }
 
     private func cycleGridSize() {
@@ -470,10 +492,10 @@ class GridOverlayView: NSView {
             let nextIndex = (currentIndex + 1) % gridPresets.count
             gridSize = gridPresets[nextIndex]
         } else {
-            gridSize = gridPresets[0]
+            gridSize = gridPresets.first ?? GridSize(cols: 8, rows: 2)
         }
 
-        // Reset selection to single cell
+        // Reset selection to single cell at top-left
         selection = GridSelection(
             anchor: GridOffset(col: 0, row: 0),
             target: GridOffset(col: 0, row: 0)

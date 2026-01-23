@@ -7,6 +7,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var hotKey: HotKey?
     private var overlayController: OverlayWindowController?
+    private var settingsController: SettingsWindowController?
+    private var settingsObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         print("MacTile launched")
@@ -20,10 +22,36 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Create status bar item
         setupStatusItem()
 
-        // Register global hotkey (Control + Option + G)
+        // Register global hotkey from settings
         setupHotKey()
 
-        print("MacTile ready. Press Control+Option+G to show grid.")
+        // Observe settings changes
+        observeSettings()
+
+        let shortcut = SettingsManager.shared.settings.toggleOverlayShortcut.displayString
+        print("MacTile ready. Press \(shortcut) to show grid.")
+    }
+
+    private func observeSettings() {
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: .settingsDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleSettingsChanged()
+        }
+    }
+
+    private func handleSettingsChanged() {
+        // Re-register hotkey if it changed
+        setupHotKey()
+
+        // Update status item visibility
+        let settings = SettingsManager.shared.settings
+        statusItem?.isVisible = settings.showMenuBarIcon
+
+        // Rebuild menu to show updated shortcuts and presets
+        rebuildMenu()
     }
 
     private func checkAccessibilityPermissions() {
@@ -68,7 +96,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupStatusItem() {
+        let settings = SettingsManager.shared.settings
+
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem?.isVisible = settings.showMenuBarIcon
 
         if let button = statusItem?.button {
             // Use a grid icon
@@ -80,20 +111,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        rebuildMenu()
+    }
+
+    private func rebuildMenu() {
+        let settings = SettingsManager.shared.settings
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Show Grid (^⌥G)", action: #selector(showGrid), keyEquivalent: ""))
+
+        // Show Grid item with current shortcut
+        let shortcutDisplay = settings.toggleOverlayShortcut.displayString
+        menu.addItem(NSMenuItem(title: "Show Grid (\(shortcutDisplay))", action: #selector(showGrid), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
 
+        // Grid presets submenu - dynamically built from settings
         let presetMenu = NSMenu()
-        presetMenu.addItem(NSMenuItem(title: "8x2 Grid", action: #selector(setGrid8x2), keyEquivalent: ""))
-        presetMenu.addItem(NSMenuItem(title: "6x4 Grid", action: #selector(setGrid6x4), keyEquivalent: ""))
-        presetMenu.addItem(NSMenuItem(title: "4x4 Grid", action: #selector(setGrid4x4), keyEquivalent: ""))
-        presetMenu.addItem(NSMenuItem(title: "3x3 Grid", action: #selector(setGrid3x3), keyEquivalent: ""))
-        presetMenu.addItem(NSMenuItem(title: "2x2 Grid", action: #selector(setGrid2x2), keyEquivalent: ""))
+        for size in settings.gridSizes {
+            let item = NSMenuItem(title: "\(size.cols)x\(size.rows) Grid", action: #selector(setGridPreset(_:)), keyEquivalent: "")
+            item.representedObject = size
+            presetMenu.addItem(item)
+        }
 
         let presetItem = NSMenuItem(title: "Grid Presets", action: nil, keyEquivalent: "")
         presetItem.submenu = presetMenu
         menu.addItem(presetItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // Settings item
+        menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
 
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Check Accessibility...", action: #selector(recheckAccessibility), keyEquivalent: ""))
@@ -105,11 +150,55 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupHotKey() {
-        // Control + Option + G to toggle grid
-        hotKey = HotKey(key: .g, modifiers: [.control, .option])
-        hotKey?.keyDownHandler = { [weak self] in
-            self?.toggleGrid()
+        let settings = SettingsManager.shared.settings
+        let shortcut = settings.toggleOverlayShortcut
+
+        // Convert our modifier flags to HotKey modifiers
+        var modifiers: NSEvent.ModifierFlags = []
+        if shortcut.modifiers & KeyboardShortcut.Modifiers.control != 0 {
+            modifiers.insert(.control)
         }
+        if shortcut.modifiers & KeyboardShortcut.Modifiers.option != 0 {
+            modifiers.insert(.option)
+        }
+        if shortcut.modifiers & KeyboardShortcut.Modifiers.shift != 0 {
+            modifiers.insert(.shift)
+        }
+        if shortcut.modifiers & KeyboardShortcut.Modifiers.command != 0 {
+            modifiers.insert(.command)
+        }
+
+        // Map keyCode to HotKey.Key
+        if let key = keyCodeToHotKey(shortcut.keyCode) {
+            hotKey = HotKey(key: key, modifiers: modifiers)
+            hotKey?.keyDownHandler = { [weak self] in
+                self?.toggleGrid()
+            }
+            print("Registered hotkey: \(shortcut.displayString)")
+        } else {
+            print("Failed to register hotkey - unknown key code: \(shortcut.keyCode)")
+            // Fall back to default
+            hotKey = HotKey(key: .g, modifiers: [.control, .option])
+            hotKey?.keyDownHandler = { [weak self] in
+                self?.toggleGrid()
+            }
+        }
+    }
+
+    private func keyCodeToHotKey(_ keyCode: UInt16) -> Key? {
+        // Map common key codes to HotKey.Key
+        let keyMap: [UInt16: Key] = [
+            0: .a, 1: .s, 2: .d, 3: .f, 4: .h, 5: .g, 6: .z, 7: .x,
+            8: .c, 9: .v, 11: .b, 12: .q, 13: .w, 14: .e, 15: .r,
+            16: .y, 17: .t, 18: .one, 19: .two, 20: .three, 21: .four, 22: .six,
+            23: .five, 24: .equal, 25: .nine, 26: .seven, 27: .minus, 28: .eight, 29: .zero,
+            30: .rightBracket, 31: .o, 32: .u, 33: .leftBracket, 34: .i, 35: .p, 36: .return,
+            37: .l, 38: .j, 39: .quote, 40: .k, 41: .semicolon, 42: .backslash, 43: .comma,
+            44: .slash, 45: .n, 46: .m, 47: .period, 48: .tab, 49: .space,
+            50: .grave, 51: .delete, 53: .escape,
+            123: .leftArrow, 124: .rightArrow, 125: .downArrow, 126: .upArrow
+        ]
+        return keyMap[keyCode]
     }
 
     @objc private func showGrid() {
@@ -128,24 +217,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc private func setGrid8x2() {
-        overlayController?.setGridSize(GridSize(cols: 8, rows: 2))
+    @objc private func setGridPreset(_ sender: NSMenuItem) {
+        guard let size = sender.representedObject as? GridSize else { return }
+        overlayController?.setGridSize(size)
     }
 
-    @objc private func setGrid6x4() {
-        overlayController?.setGridSize(GridSize(cols: 6, rows: 4))
-    }
-
-    @objc private func setGrid4x4() {
-        overlayController?.setGridSize(GridSize(cols: 4, rows: 4))
-    }
-
-    @objc private func setGrid3x3() {
-        overlayController?.setGridSize(GridSize(cols: 3, rows: 3))
-    }
-
-    @objc private func setGrid2x2() {
-        overlayController?.setGridSize(GridSize(cols: 2, rows: 2))
+    @objc private func openSettings() {
+        if settingsController == nil {
+            settingsController = SettingsWindowController()
+        }
+        settingsController?.showWindow(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc private func recheckAccessibility() {
@@ -187,6 +269,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        if let observer = settingsObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
         print("MacTile terminating")
     }
 }
