@@ -42,7 +42,17 @@ class OverlayWindowController: NSWindowController {
         // Panel configuration for floating keyboard-interactive overlay
         panel.level = .floating
         panel.isOpaque = false
-        panel.backgroundColor = NSColor.black.withAlphaComponent(0.4)
+
+        // Apply appearance settings for background
+        let appearance = settings.appearance
+        let bgColor = NSColor(
+            red: appearance.overlayBackgroundColor.red,
+            green: appearance.overlayBackgroundColor.green,
+            blue: appearance.overlayBackgroundColor.blue,
+            alpha: appearance.overlayOpacity
+        )
+        panel.backgroundColor = bgColor
+
         panel.ignoresMouseEvents = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.hasShadow = false
@@ -81,13 +91,30 @@ class OverlayWindowController: NSWindowController {
         windowTiler.spacing = settings.windowSpacing
         windowTiler.insets = settings.insets
         gridView?.gridPresets = settings.gridSizes
+        gridView?.keyboardSettings = settings.overlayKeyboard
+        gridView?.appearanceSettings = settings.appearance
+
+        // Update panel background
+        let appearance = settings.appearance
+        let bgColor = NSColor(
+            red: appearance.overlayBackgroundColor.red,
+            green: appearance.overlayBackgroundColor.green,
+            blue: appearance.overlayBackgroundColor.blue,
+            alpha: appearance.overlayOpacity
+        )
+        window?.backgroundColor = bgColor
     }
 
     private func setupGridView() {
         guard let window = window, let contentView = window.contentView else { return }
 
         let settings = SettingsManager.shared.settings
-        let gridView = GridOverlayView(gridSize: gridSize, gridPresets: settings.gridSizes)
+        let gridView = GridOverlayView(
+            gridSize: gridSize,
+            gridPresets: settings.gridSizes,
+            keyboardSettings: settings.overlayKeyboard,
+            appearanceSettings: settings.appearance
+        )
         gridView.frame = contentView.bounds
         gridView.autoresizingMask = [.width, .height]
         gridView.onSelectionConfirmed = { [weak self] selection in
@@ -248,7 +275,9 @@ class OverlayWindowController: NSWindowController {
 }
 
 /// View that displays the grid and handles keyboard input
-/// gTile-style selection: Arrow keys move first corner, Shift+Arrow moves second corner
+/// Default: Pan mode (move entire selection)
+/// Shift (configurable): Move first corner (anchor)
+/// Option (configurable): Move second corner (target)
 class GridOverlayView: NSView {
     var gridSize: GridSize {
         didSet {
@@ -268,10 +297,18 @@ class GridOverlayView: NSView {
     private var selectionAnchor: GridOffset?
 
     var gridPresets: [GridSize]
+    var keyboardSettings: OverlayKeyboardSettings
+    var appearanceSettings: AppearanceSettings {
+        didSet {
+            needsDisplay = true
+        }
+    }
 
-    init(gridSize: GridSize, gridPresets: [GridSize]) {
+    init(gridSize: GridSize, gridPresets: [GridSize], keyboardSettings: OverlayKeyboardSettings, appearanceSettings: AppearanceSettings) {
         self.gridSize = gridSize
         self.gridPresets = gridPresets
+        self.keyboardSettings = keyboardSettings
+        self.appearanceSettings = appearanceSettings
         super.init(frame: .zero)
         wantsLayer = true
     }
@@ -292,6 +329,16 @@ class GridOverlayView: NSView {
         return true
     }
 
+    // Helper to convert SettingsColor to NSColor
+    private func nsColor(_ color: SettingsColor, opacity: CGFloat? = nil) -> NSColor {
+        return NSColor(
+            red: color.red,
+            green: color.green,
+            blue: color.blue,
+            alpha: opacity ?? color.alpha
+        )
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
@@ -309,16 +356,16 @@ class GridOverlayView: NSView {
                 let isAlternate = (row + col) % 2 == 0
                 context.setFillColor(
                     isAlternate
-                        ? NSColor.white.withAlphaComponent(0.05).cgColor
-                        : NSColor.white.withAlphaComponent(0.1).cgColor
+                        ? nsColor(appearanceSettings.gridLineColor, opacity: 0.05).cgColor
+                        : nsColor(appearanceSettings.gridLineColor, opacity: 0.1).cgColor
                 )
                 context.fill(CGRect(x: x, y: y, width: cellWidth, height: cellHeight))
             }
         }
 
         // Draw grid lines
-        context.setStrokeColor(NSColor.white.withAlphaComponent(0.3).cgColor)
-        context.setLineWidth(1.0)
+        context.setStrokeColor(nsColor(appearanceSettings.gridLineColor, opacity: appearanceSettings.gridLineOpacity).cgColor)
+        context.setLineWidth(appearanceSettings.gridLineWidth)
 
         // Vertical lines
         for col in 0...gridSize.cols {
@@ -345,24 +392,24 @@ class GridOverlayView: NSView {
             let height = CGFloat(selection.height) * cellHeight
 
             // Selection fill
-            context.setFillColor(NSColor.systemBlue.withAlphaComponent(0.4).cgColor)
+            context.setFillColor(nsColor(appearanceSettings.selectionFillColor, opacity: appearanceSettings.selectionFillOpacity).cgColor)
             context.fill(CGRect(x: x, y: y, width: width, height: height))
 
             // Selection border
-            context.setStrokeColor(NSColor.systemBlue.cgColor)
-            context.setLineWidth(3.0)
+            context.setStrokeColor(nsColor(appearanceSettings.selectionBorderColor).cgColor)
+            context.setLineWidth(appearanceSettings.selectionBorderWidth)
             context.stroke(CGRect(x: x, y: y, width: width, height: height))
 
-            // Draw anchor marker (first corner - smaller filled square)
+            // Draw anchor marker (first corner - filled circle)
             let anchorX = CGFloat(selection.anchor.col) * cellWidth + cellWidth / 2 - 6
             let anchorY = bounds.height - CGFloat(selection.anchor.row + 1) * cellHeight + cellHeight / 2 - 6
-            context.setFillColor(NSColor.systemGreen.cgColor)
+            context.setFillColor(nsColor(appearanceSettings.anchorMarkerColor).cgColor)
             context.fillEllipse(in: CGRect(x: anchorX, y: anchorY, width: 12, height: 12))
 
-            // Draw target marker (second corner - smaller hollow square)
+            // Draw target marker (second corner - hollow circle)
             let targetX = CGFloat(selection.target.col) * cellWidth + cellWidth / 2 - 6
             let targetY = bounds.height - CGFloat(selection.target.row + 1) * cellHeight + cellHeight / 2 - 6
-            context.setStrokeColor(NSColor.systemOrange.cgColor)
+            context.setStrokeColor(nsColor(appearanceSettings.targetMarkerColor).cgColor)
             context.setLineWidth(2.0)
             context.strokeEllipse(in: CGRect(x: targetX, y: targetY, width: 12, height: 12))
         }
@@ -380,7 +427,13 @@ class GridOverlayView: NSView {
         )
 
         // Draw instructions at top
-        let instructions = "Arrows/HJKL: 1st corner | Shift+Arrows: 2nd corner | Enter: Apply | Esc: Cancel | Space: Cycle grid"
+        let panMod = OverlayKeyboardSettings.modifierDisplayString(keyboardSettings.panModifier)
+        let anchorMod = OverlayKeyboardSettings.modifierDisplayString(keyboardSettings.anchorModifier)
+        let targetMod = OverlayKeyboardSettings.modifierDisplayString(keyboardSettings.targetModifier)
+        let panStr = panMod == "None" ? "Arrows" : "\(panMod)+Arrows"
+        let anchorStr = anchorMod == "None" ? "Arrows" : "\(anchorMod)+Arrows"
+        let targetStr = targetMod == "None" ? "Arrows" : "\(targetMod)+Arrows"
+        let instructions = "\(panStr): Pan | \(anchorStr): 1st corner | \(targetStr): 2nd corner | Enter: Apply | Esc: Cancel"
         let instrAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 16, weight: .medium),
             .foregroundColor: NSColor.white
@@ -391,7 +444,7 @@ class GridOverlayView: NSView {
 
         // Draw selection info with corner indicators
         if let selection = selection {
-            let selInfo = "1st: (\(selection.anchor.col),\(selection.anchor.row)) → 2nd: (\(selection.target.col),\(selection.target.row)) | Size: \(selection.width)×\(selection.height)"
+            let selInfo = "1st: (\(selection.anchor.col),\(selection.anchor.row)) → 2nd: (\(selection.target.col),\(selection.target.row)) | Size: \(selection.width)x\(selection.height)"
             let selAttrs: [NSAttributedString.Key: Any] = [
                 .font: NSFont.monospacedSystemFont(ofSize: 14, weight: .regular),
                 .foregroundColor: NSColor.white.withAlphaComponent(0.8)
@@ -408,11 +461,40 @@ class GridOverlayView: NSView {
             return
         }
 
-        let shift = event.modifierFlags.contains(.shift)
+        // Get current modifier state
+        let modifiers = event.modifierFlags
+        var currentModifier: UInt = KeyboardShortcut.Modifiers.none
+        if modifiers.contains(.shift) {
+            currentModifier |= KeyboardShortcut.Modifiers.shift
+        }
+        if modifiers.contains(.option) {
+            currentModifier |= KeyboardShortcut.Modifiers.option
+        }
+        if modifiers.contains(.control) {
+            currentModifier |= KeyboardShortcut.Modifiers.control
+        }
+        if modifiers.contains(.command) {
+            currentModifier |= KeyboardShortcut.Modifiers.command
+        }
 
-        // gTile-style selection:
-        // - Without Shift: move anchor (first corner)
-        // - With Shift: move target (second corner)
+        // Determine mode based on modifier
+        enum SelectionMode {
+            case pan       // Move entire selection
+            case anchor    // Move first corner
+            case target    // Move second corner
+        }
+
+        let mode: SelectionMode
+        if currentModifier == keyboardSettings.panModifier {
+            mode = .pan
+        } else if currentModifier == keyboardSettings.anchorModifier {
+            mode = .anchor
+        } else if currentModifier == keyboardSettings.targetModifier {
+            mode = .target
+        } else {
+            // Unknown modifier combination, default to pan
+            mode = .pan
+        }
 
         var direction: Direction?
 
@@ -427,15 +509,12 @@ class GridOverlayView: NSView {
                 direction = .down
             case "k":
                 direction = .up
-            case " ":
-                cycleGridSize()
-                return
             default:
                 break
             }
         }
 
-        // Handle by key code for arrow keys
+        // Handle by key code for special keys
         if direction == nil {
             switch event.keyCode {
             case 123: // Left
@@ -446,45 +525,61 @@ class GridOverlayView: NSView {
                 direction = .down
             case 126: // Up
                 direction = .up
-            case 36: // Enter
-                print("Enter pressed - confirming selection")
-                onSelectionConfirmed?(currentSelection)
-                return
-            case 53: // Escape
-                print("Escape pressed - cancelling")
-                onCancel?()
-                return
-            case 49: // Space
-                cycleGridSize()
-                return
             default:
-                print("Unhandled key code: \(event.keyCode)")
-                super.keyDown(with: event)
-                return
+                break
             }
         }
 
-        // Apply direction to either anchor or target
+        // Handle action keys
+        if event.keyCode == keyboardSettings.applyKeyCode {
+            print("Apply key pressed - confirming selection")
+            onSelectionConfirmed?(currentSelection)
+            return
+        }
+
+        if event.keyCode == keyboardSettings.cancelKeyCode {
+            print("Cancel key pressed - cancelling")
+            onCancel?()
+            return
+        }
+
+        if event.keyCode == keyboardSettings.cycleGridKeyCode {
+            cycleGridSize()
+            return
+        }
+
+        // Apply direction based on mode
         if let dir = direction {
-            if shift {
-                // Move target (second corner)
-                let newCol = max(0, min(gridSize.cols - 1, currentSelection.target.col + dir.colDelta))
-                let newRow = max(0, min(gridSize.rows - 1, currentSelection.target.row + dir.rowDelta))
-                currentSelection = GridSelection(
-                    anchor: currentSelection.anchor,
-                    target: GridOffset(col: newCol, row: newRow)
-                )
-            } else {
-                // Move anchor (first corner)
+            switch mode {
+            case .pan:
+                // Move entire selection
+                currentSelection = GridOperations.pan(selection: currentSelection, direction: dir, gridSize: gridSize)
+
+            case .anchor:
+                // Move first corner only
                 let newCol = max(0, min(gridSize.cols - 1, currentSelection.anchor.col + dir.colDelta))
                 let newRow = max(0, min(gridSize.rows - 1, currentSelection.anchor.row + dir.rowDelta))
                 currentSelection = GridSelection(
                     anchor: GridOffset(col: newCol, row: newRow),
                     target: currentSelection.target
                 )
+
+            case .target:
+                // Move second corner only
+                let newCol = max(0, min(gridSize.cols - 1, currentSelection.target.col + dir.colDelta))
+                let newRow = max(0, min(gridSize.rows - 1, currentSelection.target.row + dir.rowDelta))
+                currentSelection = GridSelection(
+                    anchor: currentSelection.anchor,
+                    target: GridOffset(col: newCol, row: newRow)
+                )
             }
             selection = currentSelection
+            return
         }
+
+        // Unhandled key
+        print("Unhandled key code: \(event.keyCode)")
+        super.keyDown(with: event)
     }
 
     private func cycleGridSize() {

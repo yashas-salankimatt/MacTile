@@ -151,7 +151,8 @@ final class WindowManagementTests: XCTestCase {
         XCTAssertTrue(result)
 
         assertEqualWithAccuracy(manager.lastSetFrame?.origin.x, 0, accuracy: 0.1)
-        assertEqualWithAccuracy(manager.lastSetFrame?.origin.y, 0, accuracy: 0.1)
+        // Grid row 0 = top of screen, in macOS coords y = 1000 - 500 = 500
+        assertEqualWithAccuracy(manager.lastSetFrame?.origin.y, 500, accuracy: 0.1)
         assertEqualWithAccuracy(manager.lastSetFrame?.width, 500, accuracy: 0.1)
         assertEqualWithAccuracy(manager.lastSetFrame?.height, 500, accuracy: 0.1)
     }
@@ -184,7 +185,8 @@ final class WindowManagementTests: XCTestCase {
         XCTAssertTrue(result)
 
         assertEqualWithAccuracy(manager.lastSetFrame?.origin.x, 500, accuracy: 0.1)
-        assertEqualWithAccuracy(manager.lastSetFrame?.origin.y, 500, accuracy: 0.1)
+        // Grid row 1 = bottom of screen, in macOS coords y = 0
+        assertEqualWithAccuracy(manager.lastSetFrame?.origin.y, 0, accuracy: 0.1)
         assertEqualWithAccuracy(manager.lastSetFrame?.width, 500, accuracy: 0.1)
         assertEqualWithAccuracy(manager.lastSetFrame?.height, 500, accuracy: 0.1)
     }

@@ -17,6 +17,7 @@ public struct KeyboardShortcut: Equatable, Codable {
 
     /// Common modifier flags
     public struct Modifiers {
+        public static let none: UInt = 0
         public static let control: UInt = 1 << 0
         public static let option: UInt = 1 << 1
         public static let shift: UInt = 1 << 2
@@ -40,6 +41,156 @@ public struct KeyboardShortcut: Equatable, Codable {
         modifiers: Modifiers.control | Modifiers.option,
         keyString: "G"
     )
+}
+
+// MARK: - Color Settings
+
+/// RGB color representation for settings
+public struct SettingsColor: Equatable, Codable {
+    public var red: CGFloat
+    public var green: CGFloat
+    public var blue: CGFloat
+    public var alpha: CGFloat
+
+    public init(red: CGFloat, green: CGFloat, blue: CGFloat, alpha: CGFloat) {
+        self.red = max(0, min(1, red))
+        self.green = max(0, min(1, green))
+        self.blue = max(0, min(1, blue))
+        self.alpha = max(0, min(1, alpha))
+    }
+
+    // Preset colors
+    public static let black = SettingsColor(red: 0, green: 0, blue: 0, alpha: 1)
+    public static let white = SettingsColor(red: 1, green: 1, blue: 1, alpha: 1)
+    public static let blue = SettingsColor(red: 0, green: 0.478, blue: 1, alpha: 1) // System blue
+    public static let green = SettingsColor(red: 0.204, green: 0.780, blue: 0.349, alpha: 1) // System green
+    public static let orange = SettingsColor(red: 1, green: 0.584, blue: 0, alpha: 1) // System orange
+}
+
+// MARK: - Appearance Settings
+
+/// Visual appearance settings for the overlay
+public struct AppearanceSettings: Equatable, Codable {
+    // Overlay background
+    public var overlayBackgroundColor: SettingsColor
+    public var overlayOpacity: CGFloat
+
+    // Grid lines
+    public var gridLineColor: SettingsColor
+    public var gridLineOpacity: CGFloat
+    public var gridLineWidth: CGFloat
+
+    // Selection
+    public var selectionFillColor: SettingsColor
+    public var selectionFillOpacity: CGFloat
+    public var selectionBorderColor: SettingsColor
+    public var selectionBorderWidth: CGFloat
+
+    // Corner markers
+    public var anchorMarkerColor: SettingsColor  // First corner
+    public var targetMarkerColor: SettingsColor  // Second corner
+
+    public static let `default` = AppearanceSettings(
+        overlayBackgroundColor: .black,
+        overlayOpacity: 0.4,
+        gridLineColor: .white,
+        gridLineOpacity: 0.3,
+        gridLineWidth: 1.0,
+        selectionFillColor: .blue,
+        selectionFillOpacity: 0.4,
+        selectionBorderColor: .blue,
+        selectionBorderWidth: 3.0,
+        anchorMarkerColor: .green,
+        targetMarkerColor: .orange
+    )
+
+    public init(
+        overlayBackgroundColor: SettingsColor,
+        overlayOpacity: CGFloat,
+        gridLineColor: SettingsColor,
+        gridLineOpacity: CGFloat,
+        gridLineWidth: CGFloat,
+        selectionFillColor: SettingsColor,
+        selectionFillOpacity: CGFloat,
+        selectionBorderColor: SettingsColor,
+        selectionBorderWidth: CGFloat,
+        anchorMarkerColor: SettingsColor,
+        targetMarkerColor: SettingsColor
+    ) {
+        self.overlayBackgroundColor = overlayBackgroundColor
+        self.overlayOpacity = max(0, min(1, overlayOpacity))
+        self.gridLineColor = gridLineColor
+        self.gridLineOpacity = max(0, min(1, gridLineOpacity))
+        self.gridLineWidth = max(0.5, min(5, gridLineWidth))
+        self.selectionFillColor = selectionFillColor
+        self.selectionFillOpacity = max(0, min(1, selectionFillOpacity))
+        self.selectionBorderColor = selectionBorderColor
+        self.selectionBorderWidth = max(1, min(10, selectionBorderWidth))
+        self.anchorMarkerColor = anchorMarkerColor
+        self.targetMarkerColor = targetMarkerColor
+    }
+}
+
+// MARK: - Overlay Keyboard Settings
+
+/// Keyboard configuration for the overlay
+public struct OverlayKeyboardSettings: Equatable, Codable {
+    // Modifier for pan mode (move entire selection)
+    public var panModifier: UInt
+    // Modifier for moving first corner (anchor)
+    public var anchorModifier: UInt
+    // Modifier for moving second corner (target)
+    public var targetModifier: UInt
+
+    // Key codes for actions
+    public var applyKeyCode: UInt16      // Default: Enter (36)
+    public var cancelKeyCode: UInt16     // Default: Escape (53)
+    public var cycleGridKeyCode: UInt16  // Default: Space (49)
+
+    public static let `default` = OverlayKeyboardSettings(
+        panModifier: KeyboardShortcut.Modifiers.none,
+        anchorModifier: KeyboardShortcut.Modifiers.shift,
+        targetModifier: KeyboardShortcut.Modifiers.option,
+        applyKeyCode: 36,   // Enter
+        cancelKeyCode: 53,  // Escape
+        cycleGridKeyCode: 49 // Space
+    )
+
+    public init(
+        panModifier: UInt,
+        anchorModifier: UInt,
+        targetModifier: UInt,
+        applyKeyCode: UInt16,
+        cancelKeyCode: UInt16,
+        cycleGridKeyCode: UInt16
+    ) {
+        self.panModifier = panModifier
+        self.anchorModifier = anchorModifier
+        self.targetModifier = targetModifier
+        self.applyKeyCode = applyKeyCode
+        self.cancelKeyCode = cancelKeyCode
+        self.cycleGridKeyCode = cycleGridKeyCode
+    }
+
+    /// Get display string for a modifier
+    public static func modifierDisplayString(_ modifier: UInt) -> String {
+        if modifier == KeyboardShortcut.Modifiers.none { return "None" }
+        var parts: [String] = []
+        if modifier & KeyboardShortcut.Modifiers.control != 0 { parts.append("⌃") }
+        if modifier & KeyboardShortcut.Modifiers.option != 0 { parts.append("⌥") }
+        if modifier & KeyboardShortcut.Modifiers.shift != 0 { parts.append("⇧") }
+        if modifier & KeyboardShortcut.Modifiers.command != 0 { parts.append("⌘") }
+        return parts.joined()
+    }
+
+    /// Get display string for a key code
+    public static func keyCodeDisplayString(_ keyCode: UInt16) -> String {
+        let keyMap: [UInt16: String] = [
+            36: "Enter", 53: "Escape", 49: "Space", 48: "Tab", 51: "Delete",
+            123: "←", 124: "→", 125: "↓", 126: "↑"
+        ]
+        return keyMap[keyCode] ?? "Key \(keyCode)"
+    }
 }
 
 // MARK: - MacTile Settings
@@ -77,6 +228,14 @@ public struct MacTileSettings: Codable, Equatable {
     /// Global shortcut to toggle overlay
     public var toggleOverlayShortcut: KeyboardShortcut
 
+    /// Overlay keyboard configuration
+    public var overlayKeyboard: OverlayKeyboardSettings
+
+    // MARK: - Appearance
+
+    /// Visual appearance settings
+    public var appearance: AppearanceSettings
+
     // MARK: - Default Values
 
     public static let defaultGridSizes = [
@@ -93,7 +252,9 @@ public struct MacTileSettings: Codable, Equatable {
         insets: .zero,
         autoClose: true,
         showMenuBarIcon: true,
-        toggleOverlayShortcut: .defaultToggleOverlay
+        toggleOverlayShortcut: .defaultToggleOverlay,
+        overlayKeyboard: .default,
+        appearance: .default
     )
 
     public init(
@@ -102,7 +263,9 @@ public struct MacTileSettings: Codable, Equatable {
         insets: EdgeInsets,
         autoClose: Bool,
         showMenuBarIcon: Bool,
-        toggleOverlayShortcut: KeyboardShortcut
+        toggleOverlayShortcut: KeyboardShortcut,
+        overlayKeyboard: OverlayKeyboardSettings,
+        appearance: AppearanceSettings
     ) {
         self.gridSizes = gridSizes.isEmpty ? Self.defaultGridSizes : gridSizes
         self.windowSpacing = max(0, windowSpacing)
@@ -110,6 +273,8 @@ public struct MacTileSettings: Codable, Equatable {
         self.autoClose = autoClose
         self.showMenuBarIcon = showMenuBarIcon
         self.toggleOverlayShortcut = toggleOverlayShortcut
+        self.overlayKeyboard = overlayKeyboard
+        self.appearance = appearance
     }
 }
 

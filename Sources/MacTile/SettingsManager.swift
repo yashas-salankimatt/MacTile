@@ -49,15 +49,23 @@ class SettingsManager {
 
     // MARK: - Update Methods
 
+    func updateSettings(_ newSettings: MacTileSettings) {
+        settings = newSettings
+    }
+
     func updateGridSizes(_ sizes: [GridSize]) {
-        settings = MacTileSettings(
+        var newSettings = settings
+        newSettings = MacTileSettings(
             gridSizes: sizes,
             windowSpacing: settings.windowSpacing,
             insets: settings.insets,
             autoClose: settings.autoClose,
             showMenuBarIcon: settings.showMenuBarIcon,
-            toggleOverlayShortcut: settings.toggleOverlayShortcut
+            toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            overlayKeyboard: settings.overlayKeyboard,
+            appearance: settings.appearance
         )
+        settings = newSettings
     }
 
     func updateWindowSpacing(_ spacing: CGFloat) {
@@ -67,7 +75,9 @@ class SettingsManager {
             insets: settings.insets,
             autoClose: settings.autoClose,
             showMenuBarIcon: settings.showMenuBarIcon,
-            toggleOverlayShortcut: settings.toggleOverlayShortcut
+            toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            overlayKeyboard: settings.overlayKeyboard,
+            appearance: settings.appearance
         )
     }
 
@@ -78,7 +88,9 @@ class SettingsManager {
             insets: insets,
             autoClose: settings.autoClose,
             showMenuBarIcon: settings.showMenuBarIcon,
-            toggleOverlayShortcut: settings.toggleOverlayShortcut
+            toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            overlayKeyboard: settings.overlayKeyboard,
+            appearance: settings.appearance
         )
     }
 
@@ -89,7 +101,9 @@ class SettingsManager {
             insets: settings.insets,
             autoClose: autoClose,
             showMenuBarIcon: settings.showMenuBarIcon,
-            toggleOverlayShortcut: settings.toggleOverlayShortcut
+            toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            overlayKeyboard: settings.overlayKeyboard,
+            appearance: settings.appearance
         )
     }
 
@@ -100,7 +114,9 @@ class SettingsManager {
             insets: settings.insets,
             autoClose: settings.autoClose,
             showMenuBarIcon: show,
-            toggleOverlayShortcut: settings.toggleOverlayShortcut
+            toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            overlayKeyboard: settings.overlayKeyboard,
+            appearance: settings.appearance
         )
     }
 
@@ -111,7 +127,35 @@ class SettingsManager {
             insets: settings.insets,
             autoClose: settings.autoClose,
             showMenuBarIcon: settings.showMenuBarIcon,
-            toggleOverlayShortcut: shortcut
+            toggleOverlayShortcut: shortcut,
+            overlayKeyboard: settings.overlayKeyboard,
+            appearance: settings.appearance
+        )
+    }
+
+    func updateOverlayKeyboard(_ keyboard: OverlayKeyboardSettings) {
+        settings = MacTileSettings(
+            gridSizes: settings.gridSizes,
+            windowSpacing: settings.windowSpacing,
+            insets: settings.insets,
+            autoClose: settings.autoClose,
+            showMenuBarIcon: settings.showMenuBarIcon,
+            toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            overlayKeyboard: keyboard,
+            appearance: settings.appearance
+        )
+    }
+
+    func updateAppearance(_ appearance: AppearanceSettings) {
+        settings = MacTileSettings(
+            gridSizes: settings.gridSizes,
+            windowSpacing: settings.windowSpacing,
+            insets: settings.insets,
+            autoClose: settings.autoClose,
+            showMenuBarIcon: settings.showMenuBarIcon,
+            toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            overlayKeyboard: settings.overlayKeyboard,
+            appearance: appearance
         )
     }
 

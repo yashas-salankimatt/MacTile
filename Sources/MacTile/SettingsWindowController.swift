@@ -5,6 +5,8 @@ import HotKey
 /// Window controller for MacTile settings
 class SettingsWindowController: NSWindowController {
     private var tabView: NSTabView!
+
+    // General tab
     private var gridSizesField: NSTextField!
     private var spacingSlider: NSSlider!
     private var spacingLabel: NSLabel!
@@ -14,14 +16,40 @@ class SettingsWindowController: NSWindowController {
     private var insetRightField: NSTextField!
     private var autoCloseCheckbox: NSButton!
     private var showIconCheckbox: NSButton!
+
+    // Shortcuts tab
     private var shortcutField: NSTextField!
     private var shortcutRecordButton: NSButton!
     private var isRecordingShortcut = false
     private var recordedShortcut: KeyboardShortcut?
+    private var panModifierPopup: NSPopUpButton!
+    private var anchorModifierPopup: NSPopUpButton!
+    private var targetModifierPopup: NSPopUpButton!
+    private var applyKeyPopup: NSPopUpButton!
+    private var cancelKeyPopup: NSPopUpButton!
+    private var cycleGridKeyPopup: NSPopUpButton!
+
+    // Appearance tab
+    private var overlayOpacitySlider: NSSlider!
+    private var overlayOpacityLabel: NSTextField!
+    private var gridLineOpacitySlider: NSSlider!
+    private var gridLineOpacityLabel: NSTextField!
+    private var gridLineWidthSlider: NSSlider!
+    private var gridLineWidthLabel: NSTextField!
+    private var selectionFillOpacitySlider: NSSlider!
+    private var selectionFillOpacityLabel: NSTextField!
+    private var selectionBorderWidthSlider: NSSlider!
+    private var selectionBorderWidthLabel: NSTextField!
+    private var overlayColorWell: NSColorWell!
+    private var gridLineColorWell: NSColorWell!
+    private var selectionFillColorWell: NSColorWell!
+    private var selectionBorderColorWell: NSColorWell!
+    private var anchorMarkerColorWell: NSColorWell!
+    private var targetMarkerColorWell: NSColorWell!
 
     convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 500, height: 400),
+            contentRect: NSRect(x: 0, y: 0, width: 580, height: 520),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -39,7 +67,7 @@ class SettingsWindowController: NSWindowController {
         guard let window = window else { return }
 
         // Create tab view
-        tabView = NSTabView(frame: NSRect(x: 20, y: 60, width: 460, height: 320))
+        tabView = NSTabView(frame: NSRect(x: 20, y: 60, width: 540, height: 440))
         tabView.autoresizingMask = [.width, .height]
 
         // Add tabs
@@ -50,6 +78,10 @@ class SettingsWindowController: NSWindowController {
         let shortcutsTab = createShortcutsTab()
         shortcutsTab.label = "Shortcuts"
         tabView.addTabViewItem(shortcutsTab)
+
+        let appearanceTab = createAppearanceTab()
+        appearanceTab.label = "Appearance"
+        tabView.addTabViewItem(appearanceTab)
 
         window.contentView?.addSubview(tabView)
 
@@ -63,7 +95,7 @@ class SettingsWindowController: NSWindowController {
         resetButton.action = #selector(resetToDefaults)
         window.contentView?.addSubview(resetButton)
 
-        let applyButton = NSButton(frame: NSRect(x: 360, y: buttonY, width: 80, height: 24))
+        let applyButton = NSButton(frame: NSRect(x: 460, y: buttonY, width: 80, height: 24))
         applyButton.title = "Apply"
         applyButton.bezelStyle = .rounded
         applyButton.target = self
@@ -74,9 +106,9 @@ class SettingsWindowController: NSWindowController {
 
     private func createGeneralTab() -> NSTabViewItem {
         let item = NSTabViewItem()
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: 440, height: 280))
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 400))
 
-        var y: CGFloat = 240
+        var y: CGFloat = 360
 
         // Grid Sizes Section
         let gridLabel = createLabel("Grid Sizes (comma-separated, e.g., \"8x2, 6x4, 4x4\"):", frame: NSRect(x: 20, y: y, width: 400, height: 20))
@@ -172,15 +204,17 @@ class SettingsWindowController: NSWindowController {
 
     private func createShortcutsTab() -> NSTabViewItem {
         let item = NSTabViewItem()
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: 440, height: 280))
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 400))
 
-        var y: CGFloat = 240
+        var y: CGFloat = 360
+        let popupX: CGFloat = 240
+        let popupWidth: CGFloat = 120
 
         // Global Hotkey Section
-        let hotkeyLabel = createLabel("Toggle Overlay Shortcut:", frame: NSRect(x: 20, y: y, width: 180, height: 20))
+        let hotkeyLabel = createLabel("Toggle Overlay Shortcut:", frame: NSRect(x: 20, y: y, width: 220, height: 20))
         hotkeyLabel.font = NSFont.boldSystemFont(ofSize: 13)
         view.addSubview(hotkeyLabel)
-        y -= 30
+        y -= 28
 
         shortcutField = NSTextField(frame: NSRect(x: 20, y: y, width: 150, height: 24))
         shortcutField.isEditable = false
@@ -195,37 +229,232 @@ class SettingsWindowController: NSWindowController {
         shortcutRecordButton.target = self
         shortcutRecordButton.action = #selector(toggleRecordShortcut)
         view.addSubview(shortcutRecordButton)
-        y -= 20
+        y -= 18
 
         let shortcutHint = createLabel("Click Record and press your desired key combination", frame: NSRect(x: 20, y: y, width: 400, height: 16))
         shortcutHint.font = NSFont.systemFont(ofSize: 11)
         shortcutHint.textColor = .secondaryLabelColor
         view.addSubview(shortcutHint)
-        y -= 50
+        y -= 35
 
-        // Overlay Shortcuts Info
-        let overlayLabel = createLabel("Overlay Navigation (when overlay is visible):", frame: NSRect(x: 20, y: y, width: 400, height: 20))
-        overlayLabel.font = NSFont.boldSystemFont(ofSize: 13)
-        view.addSubview(overlayLabel)
-        y -= 25
+        // Overlay Modifier Settings
+        let modifiersLabel = createLabel("Selection Mode Modifiers:", frame: NSRect(x: 20, y: y, width: 400, height: 20))
+        modifiersLabel.font = NSFont.boldSystemFont(ofSize: 13)
+        view.addSubview(modifiersLabel)
+        y -= 28
 
-        let shortcuts = [
-            "Arrow Keys / H J K L  →  Select first corner",
-            "Shift + Arrows / H J K L  →  Select second corner",
-            "Space  →  Cycle through grid sizes",
-            "Enter  →  Apply selection and resize window",
-            "Escape  →  Cancel and close overlay"
-        ]
+        // Pan modifier
+        let panLabel = createLabel("Pan (move entire selection):", frame: NSRect(x: 20, y: y, width: 220, height: 20))
+        view.addSubview(panLabel)
+        panModifierPopup = NSPopUpButton(frame: NSRect(x: popupX, y: y - 2, width: popupWidth, height: 24))
+        panModifierPopup.addItems(withTitles: ["None", "Shift", "Option", "Control", "Command"])
+        view.addSubview(panModifierPopup)
+        y -= 28
 
-        for shortcut in shortcuts {
-            let label = createLabel(shortcut, frame: NSRect(x: 30, y: y, width: 380, height: 18))
-            label.font = NSFont.systemFont(ofSize: 12)
-            view.addSubview(label)
-            y -= 20
-        }
+        // Anchor modifier
+        let anchorLabel = createLabel("Anchor (move first corner):", frame: NSRect(x: 20, y: y, width: 220, height: 20))
+        view.addSubview(anchorLabel)
+        anchorModifierPopup = NSPopUpButton(frame: NSRect(x: popupX, y: y - 2, width: popupWidth, height: 24))
+        anchorModifierPopup.addItems(withTitles: ["None", "Shift", "Option", "Control", "Command"])
+        view.addSubview(anchorModifierPopup)
+        y -= 28
+
+        // Target modifier
+        let targetLabel = createLabel("Target (move second corner):", frame: NSRect(x: 20, y: y, width: 220, height: 20))
+        view.addSubview(targetLabel)
+        targetModifierPopup = NSPopUpButton(frame: NSRect(x: popupX, y: y - 2, width: popupWidth, height: 24))
+        targetModifierPopup.addItems(withTitles: ["None", "Shift", "Option", "Control", "Command"])
+        view.addSubview(targetModifierPopup)
+        y -= 35
+
+        // Action keys
+        let actionLabel = createLabel("Action Keys:", frame: NSRect(x: 20, y: y, width: 400, height: 20))
+        actionLabel.font = NSFont.boldSystemFont(ofSize: 13)
+        view.addSubview(actionLabel)
+        y -= 28
+
+        // Apply key
+        let applyLabel = createLabel("Apply selection:", frame: NSRect(x: 20, y: y, width: 140, height: 20))
+        view.addSubview(applyLabel)
+        applyKeyPopup = NSPopUpButton(frame: NSRect(x: 160, y: y - 2, width: 100, height: 24))
+        applyKeyPopup.addItems(withTitles: ["Enter", "Space", "Tab"])
+        view.addSubview(applyKeyPopup)
+        y -= 28
+
+        // Cancel key
+        let cancelLabel = createLabel("Cancel overlay:", frame: NSRect(x: 20, y: y, width: 140, height: 20))
+        view.addSubview(cancelLabel)
+        cancelKeyPopup = NSPopUpButton(frame: NSRect(x: 160, y: y - 2, width: 100, height: 24))
+        cancelKeyPopup.addItems(withTitles: ["Escape", "Q"])
+        view.addSubview(cancelKeyPopup)
+        y -= 28
+
+        // Cycle grid key
+        let cycleLabel = createLabel("Cycle grid sizes:", frame: NSRect(x: 20, y: y, width: 140, height: 20))
+        view.addSubview(cycleLabel)
+        cycleGridKeyPopup = NSPopUpButton(frame: NSRect(x: 160, y: y - 2, width: 100, height: 24))
+        cycleGridKeyPopup.addItems(withTitles: ["Space", "Tab", "G"])
+        view.addSubview(cycleGridKeyPopup)
+        y -= 35
+
+        // Navigation hint
+        let navHint = createLabel("Navigation: Arrow keys or H/J/K/L (vim-style)", frame: NSRect(x: 20, y: y, width: 400, height: 16))
+        navHint.font = NSFont.systemFont(ofSize: 11)
+        navHint.textColor = .secondaryLabelColor
+        view.addSubview(navHint)
 
         item.view = view
         return item
+    }
+
+    private func createAppearanceTab() -> NSTabViewItem {
+        let item = NSTabViewItem()
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 400))
+
+        var y: CGFloat = 360
+        let colorWellWidth: CGFloat = 44
+        let sliderWidth: CGFloat = 150
+
+        // Overlay Background
+        let overlaySection = createLabel("Overlay Background:", frame: NSRect(x: 20, y: y, width: 200, height: 20))
+        overlaySection.font = NSFont.boldSystemFont(ofSize: 13)
+        view.addSubview(overlaySection)
+        y -= 28
+
+        let overlayColorLabel = createLabel("Color:", frame: NSRect(x: 20, y: y, width: 60, height: 20))
+        view.addSubview(overlayColorLabel)
+        overlayColorWell = NSColorWell(frame: NSRect(x: 80, y: y - 2, width: colorWellWidth, height: 24))
+        view.addSubview(overlayColorWell)
+
+        let overlayOpacityLabelTitle = createLabel("Opacity:", frame: NSRect(x: 150, y: y, width: 60, height: 20))
+        view.addSubview(overlayOpacityLabelTitle)
+        overlayOpacitySlider = NSSlider(frame: NSRect(x: 210, y: y, width: sliderWidth, height: 20))
+        overlayOpacitySlider.minValue = 0
+        overlayOpacitySlider.maxValue = 1
+        overlayOpacitySlider.target = self
+        overlayOpacitySlider.action = #selector(overlayOpacityChanged)
+        view.addSubview(overlayOpacitySlider)
+        overlayOpacityLabel = createLabel("40%", frame: NSRect(x: 365, y: y, width: 50, height: 20))
+        view.addSubview(overlayOpacityLabel)
+        y -= 35
+
+        // Grid Lines
+        let gridSection = createLabel("Grid Lines:", frame: NSRect(x: 20, y: y, width: 200, height: 20))
+        gridSection.font = NSFont.boldSystemFont(ofSize: 13)
+        view.addSubview(gridSection)
+        y -= 28
+
+        let gridColorLabel = createLabel("Color:", frame: NSRect(x: 20, y: y, width: 60, height: 20))
+        view.addSubview(gridColorLabel)
+        gridLineColorWell = NSColorWell(frame: NSRect(x: 80, y: y - 2, width: colorWellWidth, height: 24))
+        view.addSubview(gridLineColorWell)
+
+        let gridOpacityLabelTitle = createLabel("Opacity:", frame: NSRect(x: 150, y: y, width: 60, height: 20))
+        view.addSubview(gridOpacityLabelTitle)
+        gridLineOpacitySlider = NSSlider(frame: NSRect(x: 210, y: y, width: sliderWidth, height: 20))
+        gridLineOpacitySlider.minValue = 0
+        gridLineOpacitySlider.maxValue = 1
+        gridLineOpacitySlider.target = self
+        gridLineOpacitySlider.action = #selector(gridLineOpacityChanged)
+        view.addSubview(gridLineOpacitySlider)
+        gridLineOpacityLabel = createLabel("30%", frame: NSRect(x: 365, y: y, width: 50, height: 20))
+        view.addSubview(gridLineOpacityLabel)
+        y -= 26
+
+        let gridWidthLabelTitle = createLabel("Line width:", frame: NSRect(x: 20, y: y, width: 80, height: 20))
+        view.addSubview(gridWidthLabelTitle)
+        gridLineWidthSlider = NSSlider(frame: NSRect(x: 100, y: y, width: 100, height: 20))
+        gridLineWidthSlider.minValue = 0.5
+        gridLineWidthSlider.maxValue = 5
+        gridLineWidthSlider.target = self
+        gridLineWidthSlider.action = #selector(gridLineWidthChanged)
+        view.addSubview(gridLineWidthSlider)
+        gridLineWidthLabel = createLabel("1.0 px", frame: NSRect(x: 205, y: y, width: 60, height: 20))
+        view.addSubview(gridLineWidthLabel)
+        y -= 35
+
+        // Selection
+        let selectionSection = createLabel("Selection:", frame: NSRect(x: 20, y: y, width: 200, height: 20))
+        selectionSection.font = NSFont.boldSystemFont(ofSize: 13)
+        view.addSubview(selectionSection)
+        y -= 28
+
+        // Fill color
+        let fillColorLabel = createLabel("Fill color:", frame: NSRect(x: 20, y: y, width: 70, height: 20))
+        view.addSubview(fillColorLabel)
+        selectionFillColorWell = NSColorWell(frame: NSRect(x: 90, y: y - 2, width: colorWellWidth, height: 24))
+        view.addSubview(selectionFillColorWell)
+
+        let fillOpacityLabelTitle = createLabel("Opacity:", frame: NSRect(x: 150, y: y, width: 60, height: 20))
+        view.addSubview(fillOpacityLabelTitle)
+        selectionFillOpacitySlider = NSSlider(frame: NSRect(x: 210, y: y, width: sliderWidth, height: 20))
+        selectionFillOpacitySlider.minValue = 0
+        selectionFillOpacitySlider.maxValue = 1
+        selectionFillOpacitySlider.target = self
+        selectionFillOpacitySlider.action = #selector(selectionFillOpacityChanged)
+        view.addSubview(selectionFillOpacitySlider)
+        selectionFillOpacityLabel = createLabel("40%", frame: NSRect(x: 365, y: y, width: 50, height: 20))
+        view.addSubview(selectionFillOpacityLabel)
+        y -= 26
+
+        // Border color
+        let borderColorLabel = createLabel("Border color:", frame: NSRect(x: 20, y: y, width: 80, height: 20))
+        view.addSubview(borderColorLabel)
+        selectionBorderColorWell = NSColorWell(frame: NSRect(x: 100, y: y - 2, width: colorWellWidth, height: 24))
+        view.addSubview(selectionBorderColorWell)
+
+        let borderWidthLabelTitle = createLabel("Width:", frame: NSRect(x: 160, y: y, width: 50, height: 20))
+        view.addSubview(borderWidthLabelTitle)
+        selectionBorderWidthSlider = NSSlider(frame: NSRect(x: 210, y: y, width: 100, height: 20))
+        selectionBorderWidthSlider.minValue = 1
+        selectionBorderWidthSlider.maxValue = 10
+        selectionBorderWidthSlider.target = self
+        selectionBorderWidthSlider.action = #selector(selectionBorderWidthChanged)
+        view.addSubview(selectionBorderWidthSlider)
+        selectionBorderWidthLabel = createLabel("3.0 px", frame: NSRect(x: 315, y: y, width: 60, height: 20))
+        view.addSubview(selectionBorderWidthLabel)
+        y -= 35
+
+        // Corner Markers
+        let markersSection = createLabel("Corner Markers:", frame: NSRect(x: 20, y: y, width: 200, height: 20))
+        markersSection.font = NSFont.boldSystemFont(ofSize: 13)
+        view.addSubview(markersSection)
+        y -= 28
+
+        let anchorColorLabel = createLabel("Anchor (first):", frame: NSRect(x: 20, y: y, width: 90, height: 20))
+        view.addSubview(anchorColorLabel)
+        anchorMarkerColorWell = NSColorWell(frame: NSRect(x: 110, y: y - 2, width: colorWellWidth, height: 24))
+        view.addSubview(anchorMarkerColorWell)
+
+        let targetColorLabel = createLabel("Target (second):", frame: NSRect(x: 180, y: y, width: 100, height: 20))
+        view.addSubview(targetColorLabel)
+        targetMarkerColorWell = NSColorWell(frame: NSRect(x: 280, y: y - 2, width: colorWellWidth, height: 24))
+        view.addSubview(targetMarkerColorWell)
+
+        item.view = view
+        return item
+    }
+
+    // MARK: - Appearance Slider Actions
+
+    @objc private func overlayOpacityChanged() {
+        overlayOpacityLabel.stringValue = "\(Int(overlayOpacitySlider.doubleValue * 100))%"
+    }
+
+    @objc private func gridLineOpacityChanged() {
+        gridLineOpacityLabel.stringValue = "\(Int(gridLineOpacitySlider.doubleValue * 100))%"
+    }
+
+    @objc private func gridLineWidthChanged() {
+        gridLineWidthLabel.stringValue = String(format: "%.1f px", gridLineWidthSlider.doubleValue)
+    }
+
+    @objc private func selectionFillOpacityChanged() {
+        selectionFillOpacityLabel.stringValue = "\(Int(selectionFillOpacitySlider.doubleValue * 100))%"
+    }
+
+    @objc private func selectionBorderWidthChanged() {
+        selectionBorderWidthLabel.stringValue = String(format: "%.1f px", selectionBorderWidthSlider.doubleValue)
     }
 
     private func createLabel(_ text: String, frame: NSRect) -> NSTextField {
@@ -258,9 +487,118 @@ class SettingsWindowController: NSWindowController {
         autoCloseCheckbox.state = settings.autoClose ? .on : .off
         showIconCheckbox.state = settings.showMenuBarIcon ? .on : .off
 
-        // Shortcut
+        // Global shortcut
         shortcutField.stringValue = settings.toggleOverlayShortcut.displayString
         recordedShortcut = settings.toggleOverlayShortcut
+
+        // Overlay keyboard settings
+        let keyboard = settings.overlayKeyboard
+        panModifierPopup.selectItem(at: modifierToIndex(keyboard.panModifier))
+        anchorModifierPopup.selectItem(at: modifierToIndex(keyboard.anchorModifier))
+        targetModifierPopup.selectItem(at: modifierToIndex(keyboard.targetModifier))
+        applyKeyPopup.selectItem(at: keyCodeToApplyIndex(keyboard.applyKeyCode))
+        cancelKeyPopup.selectItem(at: keyCodeToCancelIndex(keyboard.cancelKeyCode))
+        cycleGridKeyPopup.selectItem(at: keyCodeToCycleIndex(keyboard.cycleGridKeyCode))
+
+        // Appearance settings
+        let appearance = settings.appearance
+        overlayColorWell.color = appearance.overlayBackgroundColor.nsColor
+        overlayOpacitySlider.doubleValue = Double(appearance.overlayOpacity)
+        overlayOpacityLabel.stringValue = "\(Int(appearance.overlayOpacity * 100))%"
+
+        gridLineColorWell.color = appearance.gridLineColor.nsColor
+        gridLineOpacitySlider.doubleValue = Double(appearance.gridLineOpacity)
+        gridLineOpacityLabel.stringValue = "\(Int(appearance.gridLineOpacity * 100))%"
+        gridLineWidthSlider.doubleValue = Double(appearance.gridLineWidth)
+        gridLineWidthLabel.stringValue = String(format: "%.1f px", appearance.gridLineWidth)
+
+        selectionFillColorWell.color = appearance.selectionFillColor.nsColor
+        selectionFillOpacitySlider.doubleValue = Double(appearance.selectionFillOpacity)
+        selectionFillOpacityLabel.stringValue = "\(Int(appearance.selectionFillOpacity * 100))%"
+
+        selectionBorderColorWell.color = appearance.selectionBorderColor.nsColor
+        selectionBorderWidthSlider.doubleValue = Double(appearance.selectionBorderWidth)
+        selectionBorderWidthLabel.stringValue = String(format: "%.1f px", appearance.selectionBorderWidth)
+
+        anchorMarkerColorWell.color = appearance.anchorMarkerColor.nsColor
+        targetMarkerColorWell.color = appearance.targetMarkerColor.nsColor
+    }
+
+    // MARK: - Modifier/Key Conversion Helpers
+
+    // Popup order: ["None", "Shift", "Option", "Control", "Command"]
+    private func modifierToIndex(_ modifier: UInt) -> Int {
+        switch modifier {
+        case KeyboardShortcut.Modifiers.none: return 0
+        case KeyboardShortcut.Modifiers.shift: return 1
+        case KeyboardShortcut.Modifiers.option: return 2
+        case KeyboardShortcut.Modifiers.control: return 3
+        case KeyboardShortcut.Modifiers.command: return 4
+        default: return 0  // Default to "None"
+        }
+    }
+
+    private func indexToModifier(_ index: Int) -> UInt {
+        switch index {
+        case 0: return KeyboardShortcut.Modifiers.none
+        case 1: return KeyboardShortcut.Modifiers.shift
+        case 2: return KeyboardShortcut.Modifiers.option
+        case 3: return KeyboardShortcut.Modifiers.control
+        case 4: return KeyboardShortcut.Modifiers.command
+        default: return KeyboardShortcut.Modifiers.none
+        }
+    }
+
+    private func keyCodeToApplyIndex(_ keyCode: UInt16) -> Int {
+        switch keyCode {
+        case 36: return 0  // Enter
+        case 49: return 1  // Space
+        case 48: return 2  // Tab
+        default: return 0
+        }
+    }
+
+    private func applyIndexToKeyCode(_ index: Int) -> UInt16 {
+        switch index {
+        case 0: return 36  // Enter
+        case 1: return 49  // Space
+        case 2: return 48  // Tab
+        default: return 36
+        }
+    }
+
+    private func keyCodeToCancelIndex(_ keyCode: UInt16) -> Int {
+        switch keyCode {
+        case 53: return 0  // Escape
+        case 12: return 1  // Q
+        default: return 0
+        }
+    }
+
+    private func cancelIndexToKeyCode(_ index: Int) -> UInt16 {
+        switch index {
+        case 0: return 53  // Escape
+        case 1: return 12  // Q
+        default: return 53
+        }
+    }
+
+    private func keyCodeToCycleIndex(_ keyCode: UInt16) -> Int {
+        switch keyCode {
+        case 49: return 0  // Space
+        case 48: return 1  // Tab
+        case 5: return 2   // G
+        default: return 0
+        }
+    }
+
+    private func cycleIndexToKeyCode(_ index: Int) -> UInt16 {
+        switch index {
+        case 0: return 49  // Space
+        case 1: return 48  // Tab
+        case 2: return 5   // G
+        default: return 49
+        }
     }
 
     @objc private func spacingSliderChanged() {
@@ -366,10 +704,37 @@ class SettingsWindowController: NSWindowController {
         SettingsManager.shared.updateAutoClose(autoCloseCheckbox.state == .on)
         SettingsManager.shared.updateShowMenuBarIcon(showIconCheckbox.state == .on)
 
-        // Update shortcut
+        // Update global shortcut
         if let shortcut = recordedShortcut {
             SettingsManager.shared.updateToggleOverlayShortcut(shortcut)
         }
+
+        // Update overlay keyboard settings
+        let keyboardSettings = OverlayKeyboardSettings(
+            panModifier: indexToModifier(panModifierPopup.indexOfSelectedItem),
+            anchorModifier: indexToModifier(anchorModifierPopup.indexOfSelectedItem),
+            targetModifier: indexToModifier(targetModifierPopup.indexOfSelectedItem),
+            applyKeyCode: applyIndexToKeyCode(applyKeyPopup.indexOfSelectedItem),
+            cancelKeyCode: cancelIndexToKeyCode(cancelKeyPopup.indexOfSelectedItem),
+            cycleGridKeyCode: cycleIndexToKeyCode(cycleGridKeyPopup.indexOfSelectedItem)
+        )
+        SettingsManager.shared.updateOverlayKeyboard(keyboardSettings)
+
+        // Update appearance settings
+        let appearanceSettings = AppearanceSettings(
+            overlayBackgroundColor: SettingsColor(nsColor: overlayColorWell.color),
+            overlayOpacity: CGFloat(overlayOpacitySlider.doubleValue),
+            gridLineColor: SettingsColor(nsColor: gridLineColorWell.color),
+            gridLineOpacity: CGFloat(gridLineOpacitySlider.doubleValue),
+            gridLineWidth: CGFloat(gridLineWidthSlider.doubleValue),
+            selectionFillColor: SettingsColor(nsColor: selectionFillColorWell.color),
+            selectionFillOpacity: CGFloat(selectionFillOpacitySlider.doubleValue),
+            selectionBorderColor: SettingsColor(nsColor: selectionBorderColorWell.color),
+            selectionBorderWidth: CGFloat(selectionBorderWidthSlider.doubleValue),
+            anchorMarkerColor: SettingsColor(nsColor: anchorMarkerColorWell.color),
+            targetMarkerColor: SettingsColor(nsColor: targetMarkerColorWell.color)
+        )
+        SettingsManager.shared.updateAppearance(appearanceSettings)
 
         window?.close()
     }
@@ -382,3 +747,28 @@ class SettingsWindowController: NSWindowController {
 
 // Type alias for NSTextField used as label
 typealias NSLabel = NSTextField
+
+// MARK: - SettingsColor NSColor Extension
+
+extension SettingsColor {
+    /// Initialize from NSColor
+    init(nsColor: NSColor) {
+        let color = nsColor.usingColorSpace(.sRGB) ?? nsColor
+        self.init(
+            red: color.redComponent,
+            green: color.greenComponent,
+            blue: color.blueComponent,
+            alpha: color.alphaComponent
+        )
+    }
+
+    /// Convert to NSColor
+    var nsColor: NSColor {
+        return NSColor(
+            srgbRed: red,
+            green: green,
+            blue: blue,
+            alpha: alpha
+        )
+    }
+}

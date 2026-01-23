@@ -214,6 +214,7 @@ public enum GridOperations {
     }
 
     /// Convert a grid selection to screen coordinates
+    /// Note: Grid uses top-left origin (row 0 = top), macOS uses bottom-left origin (y=0 = bottom)
     public static func selectionToRect(
         selection: GridSelection,
         gridSize: GridSize,
@@ -231,9 +232,16 @@ public enum GridOperations {
         let cellWidth = availableWidth / CGFloat(gridSize.cols)
         let cellHeight = availableHeight / CGFloat(gridSize.rows)
 
-        // Calculate position
+        // Calculate x position (left-to-right, same in both coordinate systems)
         let x = screenFrame.origin.x + insets.left + CGFloat(normalized.anchor.col) * cellWidth
-        let y = screenFrame.origin.y + insets.top + CGFloat(normalized.anchor.row) * cellHeight
+
+        // Calculate y position with coordinate system conversion:
+        // Grid row 0 = visual top, but in macOS coords that's a HIGH y value
+        // Grid row (n-1) = visual bottom, but in macOS coords that's a LOW y value
+        // The rect's origin.y is its BOTTOM edge in macOS coords
+        // So for a selection ending at target.row, the bottom of the rect should be:
+        // screenFrame.maxY - insets.top - (target.row + 1) * cellHeight
+        let y = screenFrame.origin.y + screenFrame.height - insets.top - CGFloat(normalized.target.row + 1) * cellHeight
 
         // Calculate size
         let width = CGFloat(selection.width) * cellWidth
@@ -256,13 +264,13 @@ public enum GridOperations {
             if normalized.target.col < gridSize.cols - 1 {
                 finalWidth -= spacing / 2
             }
-            // Top edge
+            // Top edge (in grid coords = high y in screen coords)
             if normalized.anchor.row > 0 {
-                finalY += spacing / 2
                 finalHeight -= spacing / 2
             }
-            // Bottom edge
+            // Bottom edge (in grid coords = low y in screen coords)
             if normalized.target.row < gridSize.rows - 1 {
+                finalY += spacing / 2
                 finalHeight -= spacing / 2
             }
         }
@@ -271,6 +279,7 @@ public enum GridOperations {
     }
 
     /// Convert screen coordinates to a grid selection
+    /// Note: Grid uses top-left origin (row 0 = top), macOS uses bottom-left origin (y=0 = bottom)
     public static func rectToSelection(
         rect: CGRect,
         gridSize: GridSize,
@@ -283,13 +292,26 @@ public enum GridOperations {
         let cellWidth = availableWidth / CGFloat(gridSize.cols)
         let cellHeight = availableHeight / CGFloat(gridSize.rows)
 
+        // X coordinate calculation (same in both coordinate systems)
         let relativeX = rect.origin.x - screenFrame.origin.x - insets.left
-        let relativeY = rect.origin.y - screenFrame.origin.y - insets.top
-
         let anchorCol = Int(round(relativeX / cellWidth))
-        let anchorRow = Int(round(relativeY / cellHeight))
         let targetCol = Int(round((relativeX + rect.width) / cellWidth)) - 1
-        let targetRow = Int(round((relativeY + rect.height) / cellHeight)) - 1
+
+        // Y coordinate calculation with coordinate system conversion:
+        // rect.origin.y is the BOTTOM of the rect in macOS coords
+        // rect.origin.y + rect.height is the TOP of the rect in macOS coords
+        // Grid top = screenFrame.maxY - insets.top
+        let gridTop = screenFrame.origin.y + screenFrame.height - insets.top
+
+        // Distance from grid top to rect top (gives us anchor row in grid coords)
+        let rectTop = rect.origin.y + rect.height
+        let distanceFromGridTopToRectTop = gridTop - rectTop
+        let anchorRow = Int(round(distanceFromGridTopToRectTop / cellHeight))
+
+        // Distance from grid top to rect bottom (gives us target row in grid coords)
+        let rectBottom = rect.origin.y
+        let distanceFromGridTopToRectBottom = gridTop - rectBottom
+        let targetRow = Int(round(distanceFromGridTopToRectBottom / cellHeight)) - 1
 
         return GridSelection(
             anchor: GridOffset(

@@ -344,9 +344,10 @@ final class GridTests: XCTestCase {
 
         // 2 columns out of 4 = 50% of width = 500
         XCTAssertEqual(rect.width, 500, accuracy: 0.1)
-        XCTAssertEqual(rect.height, 250, accuracy: 0.1) // half height
+        XCTAssertEqual(rect.height, 250, accuracy: 0.1) // half height (1 row of 2)
         XCTAssertEqual(rect.origin.x, 0, accuracy: 0.1)
-        XCTAssertEqual(rect.origin.y, 0, accuracy: 0.1)
+        // Grid row 0 = top of screen, in macOS coords origin.y = 500 - 250 = 250
+        XCTAssertEqual(rect.origin.y, 250, accuracy: 0.1)
     }
 
     func testSelectionToRectangleWithInsets() {
