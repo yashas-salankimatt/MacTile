@@ -233,6 +233,14 @@ public struct MacTileSettings: Codable, Equatable {
     /// Launch MacTile when user logs in
     public var launchAtLogin: Bool
 
+    // MARK: - Overlay Display
+
+    /// Show help text at the top of the overlay
+    public var showHelpText: Bool
+
+    /// Show monitor indicator when multiple monitors are connected
+    public var showMonitorIndicator: Bool
+
     // MARK: - Keyboard Shortcuts
 
     /// Global shortcut to toggle overlay (primary)
@@ -266,6 +274,8 @@ public struct MacTileSettings: Codable, Equatable {
         autoClose: true,
         showMenuBarIcon: true,
         launchAtLogin: false,
+        showHelpText: true,
+        showMonitorIndicator: true,
         toggleOverlayShortcut: .defaultToggleOverlay,
         secondaryToggleOverlayShortcut: .defaultSecondaryToggleOverlay,
         overlayKeyboard: .default,
@@ -279,6 +289,8 @@ public struct MacTileSettings: Codable, Equatable {
         autoClose: Bool,
         showMenuBarIcon: Bool,
         launchAtLogin: Bool,
+        showHelpText: Bool,
+        showMonitorIndicator: Bool,
         toggleOverlayShortcut: KeyboardShortcut,
         secondaryToggleOverlayShortcut: KeyboardShortcut?,
         overlayKeyboard: OverlayKeyboardSettings,
@@ -290,6 +302,8 @@ public struct MacTileSettings: Codable, Equatable {
         self.autoClose = autoClose
         self.showMenuBarIcon = showMenuBarIcon
         self.launchAtLogin = launchAtLogin
+        self.showHelpText = showHelpText
+        self.showMonitorIndicator = showMonitorIndicator
         self.toggleOverlayShortcut = toggleOverlayShortcut
         self.secondaryToggleOverlayShortcut = secondaryToggleOverlayShortcut
         self.overlayKeyboard = overlayKeyboard

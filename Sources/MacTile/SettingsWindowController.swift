@@ -17,6 +17,8 @@ class SettingsWindowController: NSWindowController {
     private var autoCloseCheckbox: NSButton!
     private var showIconCheckbox: NSButton!
     private var launchAtLoginCheckbox: NSButton!
+    private var showHelpTextCheckbox: NSButton!
+    private var showMonitorIndicatorCheckbox: NSButton!
 
     // Shortcuts tab - Primary
     private var shortcutField: NSTextField!
@@ -59,7 +61,7 @@ class SettingsWindowController: NSWindowController {
 
     convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 580, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 580, height: 580),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -77,7 +79,7 @@ class SettingsWindowController: NSWindowController {
         guard let window = window else { return }
 
         // Create tab view
-        tabView = NSTabView(frame: NSRect(x: 20, y: 60, width: 540, height: 440))
+        tabView = NSTabView(frame: NSRect(x: 20, y: 60, width: 540, height: 500))
         tabView.autoresizingMask = [.width, .height]
 
         // Add tabs
@@ -102,7 +104,7 @@ class SettingsWindowController: NSWindowController {
         // Add buttons at the bottom
         let buttonY: CGFloat = 20
 
-        let resetButton = NSButton(frame: NSRect(x: 20, y: buttonY, width: 120, height: 24))
+        let resetButton = NSButton(frame: NSRect(x: 20, y: buttonY, width: 150, height: 24))
         resetButton.title = "Reset to Defaults"
         resetButton.bezelStyle = .rounded
         resetButton.target = self
@@ -120,9 +122,9 @@ class SettingsWindowController: NSWindowController {
 
     private func createGeneralTab() -> NSTabViewItem {
         let item = NSTabViewItem()
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 400))
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 460))
 
-        var y: CGFloat = 360
+        var y: CGFloat = 420
 
         // Grid Sizes Section
         let gridLabel = createLabel("Grid Sizes (comma-separated, e.g., \"8x2, 6x4, 4x4\"):", frame: NSRect(x: 20, y: y, width: 400, height: 20))
@@ -216,6 +218,22 @@ class SettingsWindowController: NSWindowController {
         launchAtLoginCheckbox = NSButton(checkboxWithTitle: "Launch MacTile at login", target: nil, action: nil)
         launchAtLoginCheckbox.frame = NSRect(x: 20, y: y, width: 350, height: 20)
         view.addSubview(launchAtLoginCheckbox)
+        y -= 30
+
+        // Overlay Display Section
+        let overlayDisplayLabel = createLabel("Overlay Display:", frame: NSRect(x: 20, y: y, width: 100, height: 20))
+        overlayDisplayLabel.font = NSFont.boldSystemFont(ofSize: 13)
+        view.addSubview(overlayDisplayLabel)
+        y -= 25
+
+        showHelpTextCheckbox = NSButton(checkboxWithTitle: "Show help text at top of overlay", target: nil, action: nil)
+        showHelpTextCheckbox.frame = NSRect(x: 20, y: y, width: 350, height: 20)
+        view.addSubview(showHelpTextCheckbox)
+        y -= 25
+
+        showMonitorIndicatorCheckbox = NSButton(checkboxWithTitle: "Show monitor indicator (when multiple monitors)", target: nil, action: nil)
+        showMonitorIndicatorCheckbox.frame = NSRect(x: 20, y: y, width: 400, height: 20)
+        view.addSubview(showMonitorIndicatorCheckbox)
 
         item.view = view
         return item
@@ -223,9 +241,9 @@ class SettingsWindowController: NSWindowController {
 
     private func createShortcutsTab() -> NSTabViewItem {
         let item = NSTabViewItem()
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 400))
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 460))
 
-        var y: CGFloat = 360
+        var y: CGFloat = 420
         let popupX: CGFloat = 240
         let popupWidth: CGFloat = 120
 
@@ -356,9 +374,9 @@ class SettingsWindowController: NSWindowController {
 
     private func createAppearanceTab() -> NSTabViewItem {
         let item = NSTabViewItem()
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 400))
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 460))
 
-        var y: CGFloat = 360
+        var y: CGFloat = 420
         let colorWellWidth: CGFloat = 44
         let sliderWidth: CGFloat = 150
 
@@ -484,7 +502,7 @@ class SettingsWindowController: NSWindowController {
 
     private func createAboutTab() -> NSTabViewItem {
         let item = NSTabViewItem()
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 400))
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 460))
 
         let centerX = view.bounds.width / 2
 
@@ -492,7 +510,7 @@ class SettingsWindowController: NSWindowController {
         let iconSize: CGFloat = 128
         let iconView = NSImageView(frame: NSRect(
             x: centerX - iconSize / 2,
-            y: 220,
+            y: 280,
             width: iconSize,
             height: iconSize
         ))
@@ -503,7 +521,7 @@ class SettingsWindowController: NSWindowController {
         view.addSubview(iconView)
 
         // App name
-        let nameLabel = NSTextField(frame: NSRect(x: 0, y: 180, width: view.bounds.width, height: 30))
+        let nameLabel = NSTextField(frame: NSRect(x: 0, y: 240, width: view.bounds.width, height: 30))
         nameLabel.stringValue = "MacTile"
         nameLabel.font = NSFont.systemFont(ofSize: 24, weight: .bold)
         nameLabel.alignment = .center
@@ -515,7 +533,7 @@ class SettingsWindowController: NSWindowController {
 
         // Version
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
-        let versionLabel = NSTextField(frame: NSRect(x: 0, y: 155, width: view.bounds.width, height: 20))
+        let versionLabel = NSTextField(frame: NSRect(x: 0, y: 215, width: view.bounds.width, height: 20))
         versionLabel.stringValue = "Version \(version)"
         versionLabel.font = NSFont.systemFont(ofSize: 13)
         versionLabel.textColor = .secondaryLabelColor
@@ -527,7 +545,7 @@ class SettingsWindowController: NSWindowController {
         view.addSubview(versionLabel)
 
         // Description
-        let descLabel = NSTextField(frame: NSRect(x: 40, y: 115, width: view.bounds.width - 80, height: 30))
+        let descLabel = NSTextField(frame: NSRect(x: 40, y: 175, width: view.bounds.width - 80, height: 30))
         descLabel.stringValue = "A macOS window tiling app inspired by gTile"
         descLabel.font = NSFont.systemFont(ofSize: 13)
         descLabel.textColor = .secondaryLabelColor
@@ -539,7 +557,7 @@ class SettingsWindowController: NSWindowController {
         view.addSubview(descLabel)
 
         // GitHub link button
-        let githubButton = NSButton(frame: NSRect(x: centerX - 100, y: 70, width: 200, height: 30))
+        let githubButton = NSButton(frame: NSRect(x: centerX - 100, y: 130, width: 200, height: 30))
         githubButton.title = "GitHub Repository"
         githubButton.bezelStyle = .rounded
         githubButton.target = self
@@ -547,7 +565,7 @@ class SettingsWindowController: NSWindowController {
         view.addSubview(githubButton)
 
         // GitHub URL label
-        let urlLabel = NSTextField(frame: NSRect(x: 0, y: 45, width: view.bounds.width, height: 20))
+        let urlLabel = NSTextField(frame: NSRect(x: 0, y: 105, width: view.bounds.width, height: 20))
         urlLabel.stringValue = "github.com/yashas-salankimatt/MacTile"
         urlLabel.font = NSFont.systemFont(ofSize: 11)
         urlLabel.textColor = .tertiaryLabelColor
@@ -671,6 +689,10 @@ class SettingsWindowController: NSWindowController {
         autoCloseCheckbox.state = settings.autoClose ? .on : .off
         showIconCheckbox.state = settings.showMenuBarIcon ? .on : .off
         launchAtLoginCheckbox.state = settings.launchAtLogin ? .on : .off
+
+        // Overlay Display
+        showHelpTextCheckbox.state = settings.showHelpText ? .on : .off
+        showMonitorIndicatorCheckbox.state = settings.showMonitorIndicator ? .on : .off
 
         // Primary shortcut
         shortcutField.stringValue = settings.toggleOverlayShortcut.displayString
@@ -977,6 +999,10 @@ class SettingsWindowController: NSWindowController {
         SettingsManager.shared.updateAutoClose(autoCloseCheckbox.state == .on)
         SettingsManager.shared.updateShowMenuBarIcon(showIconCheckbox.state == .on)
         SettingsManager.shared.updateLaunchAtLogin(launchAtLoginCheckbox.state == .on)
+
+        // Update overlay display
+        SettingsManager.shared.updateShowHelpText(showHelpTextCheckbox.state == .on)
+        SettingsManager.shared.updateShowMonitorIndicator(showMonitorIndicatorCheckbox.state == .on)
 
         // Update primary shortcut
         if let shortcut = recordedShortcut {

@@ -112,6 +112,8 @@ class OverlayWindowController: NSWindowController {
         gridView?.gridPresets = settings.gridSizes
         gridView?.keyboardSettings = settings.overlayKeyboard
         gridView?.appearanceSettings = settings.appearance
+        gridView?.showHelpText = settings.showHelpText
+        gridView?.showMonitorIndicator = settings.showMonitorIndicator
 
         // Update panel background
         let appearance = settings.appearance
@@ -136,6 +138,8 @@ class OverlayWindowController: NSWindowController {
         )
         gridView.frame = contentView.bounds
         gridView.autoresizingMask = [.width, .height]
+        gridView.showHelpText = settings.showHelpText
+        gridView.showMonitorIndicator = settings.showMonitorIndicator
         gridView.onSelectionConfirmed = { [weak self] selection in
             self?.applySelection(selection)
         }
@@ -213,6 +217,14 @@ class OverlayWindowController: NSWindowController {
         // Activate the app so we can receive keyboard events
         NSApp.activate(ignoringOtherApps: true)
 
+        // Ensure grid view frame matches screen size
+        let viewFrame = NSRect(origin: .zero, size: screen.frame.size)
+        gridView?.frame = viewFrame
+
+        // Calculate top safe area (menu bar height)
+        let topInset = screen.frame.maxY - screen.visibleFrame.maxY
+        gridView?.topSafeAreaInset = max(0, topInset)
+
         // Make the grid view first responder for keyboard input
         if let gridView = gridView {
             let success = window?.makeFirstResponder(gridView) ?? false
@@ -265,10 +277,18 @@ class OverlayWindowController: NSWindowController {
         // Move and resize overlay to new monitor
         window?.setFrame(screen.frame, display: true)
 
-        // Update grid view frame
-        if let contentView = window?.contentView {
-            gridView?.frame = contentView.bounds
-        }
+        // Force layout update and set grid view frame explicitly
+        // Use the screen size directly since contentView.bounds may not have updated yet
+        let viewFrame = NSRect(origin: .zero, size: screen.frame.size)
+        gridView?.frame = viewFrame
+
+        // Force the content view to layout
+        window?.contentView?.layoutSubtreeIfNeeded()
+
+        // Calculate top safe area (menu bar height)
+        // Menu bar is at the top, so it's the difference between frame.maxY and visibleFrame.maxY
+        let topInset = screen.frame.maxY - screen.visibleFrame.maxY
+        gridView?.topSafeAreaInset = max(0, topInset)
 
         // Update monitor info in grid view
         gridView?.currentMonitorIndex = currentMonitorIndex
@@ -410,6 +430,19 @@ class GridOverlayView: NSView {
         didSet { needsDisplay = true }
     }
 
+    // Safe area inset from top (for menu bar)
+    var topSafeAreaInset: CGFloat = 0 {
+        didSet { needsDisplay = true }
+    }
+
+    // Display options
+    var showHelpText: Bool = true {
+        didSet { needsDisplay = true }
+    }
+    var showMonitorIndicator: Bool = true {
+        didSet { needsDisplay = true }
+    }
+
     var gridPresets: [GridSize]
     var keyboardSettings: OverlayKeyboardSettings
     var appearanceSettings: AppearanceSettings {
@@ -540,8 +573,8 @@ class GridOverlayView: NSView {
             withAttributes: gridLabelAttrs
         )
 
-        // Draw monitor indicator (when multiple monitors)
-        if totalMonitors > 1 {
+        // Draw monitor indicator (when multiple monitors and setting enabled)
+        if totalMonitors > 1 && showMonitorIndicator {
             let monitorLabel = "Monitor \(currentMonitorIndex + 1)/\(totalMonitors)"
             let monitorLabelAttrs: [NSAttributedString.Key: Any] = [
                 .font: NSFont.monospacedSystemFont(ofSize: 18, weight: .medium),
@@ -554,28 +587,32 @@ class GridOverlayView: NSView {
             )
         }
 
-        // Draw instructions at top
-        let panMod = OverlayKeyboardSettings.modifierDisplayString(keyboardSettings.panModifier)
-        let anchorMod = OverlayKeyboardSettings.modifierDisplayString(keyboardSettings.anchorModifier)
-        let targetMod = OverlayKeyboardSettings.modifierDisplayString(keyboardSettings.targetModifier)
-        let panStr = panMod == "None" ? "Arrows" : "\(panMod)+Arrows"
-        let anchorStr = anchorMod == "None" ? "Arrows" : "\(anchorMod)+Arrows"
-        let targetStr = targetMod == "None" ? "Arrows" : "\(targetMod)+Arrows"
+        // Draw instructions at top (if enabled)
+        if showHelpText {
+            let panMod = OverlayKeyboardSettings.modifierDisplayString(keyboardSettings.panModifier)
+            let anchorMod = OverlayKeyboardSettings.modifierDisplayString(keyboardSettings.anchorModifier)
+            let targetMod = OverlayKeyboardSettings.modifierDisplayString(keyboardSettings.targetModifier)
+            let panStr = panMod == "None" ? "Arrows" : "\(panMod)+Arrows"
+            let anchorStr = anchorMod == "None" ? "Arrows" : "\(anchorMod)+Arrows"
+            let targetStr = targetMod == "None" ? "Arrows" : "\(targetMod)+Arrows"
 
-        var instructions = "\(panStr): Pan | \(anchorStr): 1st corner | \(targetStr): 2nd corner | Enter: Apply | Esc: Cancel"
+            var instructions = "\(panStr): Pan | \(anchorStr): 1st corner | \(targetStr): 2nd corner | Enter: Apply | Esc: Cancel"
 
-        // Add Tab instruction when multiple monitors
-        if totalMonitors > 1 {
-            instructions += " | Tab: Switch Monitor"
+            // Add Tab instruction when multiple monitors
+            if totalMonitors > 1 {
+                instructions += " | Tab: Switch Monitor"
+            }
+
+            let instrAttrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 16, weight: .medium),
+                .foregroundColor: NSColor.white
+            ]
+            let instrSize = instructions.size(withAttributes: instrAttrs)
+            let instrX = (bounds.width - instrSize.width) / 2
+            // Account for menu bar / safe area at top
+            let instrY = bounds.height - 40 - topSafeAreaInset
+            instructions.draw(at: CGPoint(x: instrX, y: instrY), withAttributes: instrAttrs)
         }
-
-        let instrAttrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 16, weight: .medium),
-            .foregroundColor: NSColor.white
-        ]
-        let instrSize = instructions.size(withAttributes: instrAttrs)
-        let instrX = (bounds.width - instrSize.width) / 2
-        instructions.draw(at: CGPoint(x: instrX, y: bounds.height - 40), withAttributes: instrAttrs)
 
         // Draw selection info with corner indicators
         if let selection = selection {

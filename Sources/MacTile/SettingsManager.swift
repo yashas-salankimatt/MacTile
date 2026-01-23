@@ -62,6 +62,8 @@ class SettingsManager {
             autoClose: settings.autoClose,
             showMenuBarIcon: settings.showMenuBarIcon,
             launchAtLogin: settings.launchAtLogin,
+            showHelpText: settings.showHelpText,
+            showMonitorIndicator: settings.showMonitorIndicator,
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
             secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
@@ -78,6 +80,8 @@ class SettingsManager {
             autoClose: settings.autoClose,
             showMenuBarIcon: settings.showMenuBarIcon,
             launchAtLogin: settings.launchAtLogin,
+            showHelpText: settings.showHelpText,
+            showMonitorIndicator: settings.showMonitorIndicator,
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
             secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
@@ -93,6 +97,8 @@ class SettingsManager {
             autoClose: settings.autoClose,
             showMenuBarIcon: settings.showMenuBarIcon,
             launchAtLogin: settings.launchAtLogin,
+            showHelpText: settings.showHelpText,
+            showMonitorIndicator: settings.showMonitorIndicator,
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
             secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
@@ -108,6 +114,8 @@ class SettingsManager {
             autoClose: autoClose,
             showMenuBarIcon: settings.showMenuBarIcon,
             launchAtLogin: settings.launchAtLogin,
+            showHelpText: settings.showHelpText,
+            showMonitorIndicator: settings.showMonitorIndicator,
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
             secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
@@ -123,6 +131,8 @@ class SettingsManager {
             autoClose: settings.autoClose,
             showMenuBarIcon: show,
             launchAtLogin: settings.launchAtLogin,
+            showHelpText: settings.showHelpText,
+            showMonitorIndicator: settings.showMonitorIndicator,
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
             secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
@@ -138,6 +148,8 @@ class SettingsManager {
             autoClose: settings.autoClose,
             showMenuBarIcon: settings.showMenuBarIcon,
             launchAtLogin: launch,
+            showHelpText: settings.showHelpText,
+            showMonitorIndicator: settings.showMonitorIndicator,
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
             secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
@@ -153,6 +165,8 @@ class SettingsManager {
             autoClose: settings.autoClose,
             showMenuBarIcon: settings.showMenuBarIcon,
             launchAtLogin: settings.launchAtLogin,
+            showHelpText: settings.showHelpText,
+            showMonitorIndicator: settings.showMonitorIndicator,
             toggleOverlayShortcut: shortcut,
             secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
@@ -168,6 +182,8 @@ class SettingsManager {
             autoClose: settings.autoClose,
             showMenuBarIcon: settings.showMenuBarIcon,
             launchAtLogin: settings.launchAtLogin,
+            showHelpText: settings.showHelpText,
+            showMonitorIndicator: settings.showMonitorIndicator,
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
             secondaryToggleOverlayShortcut: shortcut,
             overlayKeyboard: settings.overlayKeyboard,
@@ -183,6 +199,8 @@ class SettingsManager {
             autoClose: settings.autoClose,
             showMenuBarIcon: settings.showMenuBarIcon,
             launchAtLogin: settings.launchAtLogin,
+            showHelpText: settings.showHelpText,
+            showMonitorIndicator: settings.showMonitorIndicator,
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
             secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: keyboard,
@@ -198,10 +216,46 @@ class SettingsManager {
             autoClose: settings.autoClose,
             showMenuBarIcon: settings.showMenuBarIcon,
             launchAtLogin: settings.launchAtLogin,
+            showHelpText: settings.showHelpText,
+            showMonitorIndicator: settings.showMonitorIndicator,
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
             secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
             appearance: appearance
+        )
+    }
+
+    func updateShowHelpText(_ show: Bool) {
+        settings = MacTileSettings(
+            gridSizes: settings.gridSizes,
+            windowSpacing: settings.windowSpacing,
+            insets: settings.insets,
+            autoClose: settings.autoClose,
+            showMenuBarIcon: settings.showMenuBarIcon,
+            launchAtLogin: settings.launchAtLogin,
+            showHelpText: show,
+            showMonitorIndicator: settings.showMonitorIndicator,
+            toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
+            overlayKeyboard: settings.overlayKeyboard,
+            appearance: settings.appearance
+        )
+    }
+
+    func updateShowMonitorIndicator(_ show: Bool) {
+        settings = MacTileSettings(
+            gridSizes: settings.gridSizes,
+            windowSpacing: settings.windowSpacing,
+            insets: settings.insets,
+            autoClose: settings.autoClose,
+            showMenuBarIcon: settings.showMenuBarIcon,
+            launchAtLogin: settings.launchAtLogin,
+            showHelpText: settings.showHelpText,
+            showMonitorIndicator: show,
+            toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
+            overlayKeyboard: settings.overlayKeyboard,
+            appearance: settings.appearance
         )
     }
 
