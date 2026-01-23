@@ -124,7 +124,7 @@ class RealWindowManager: WindowManagerProtocol {
         print("[WindowManager] BEFORE - Position: \(beforeState.position), Size: \(beforeState.size)")
 
         // STRATEGY: Move to safe position first, then use unified correction loop
-        // This avoids issues where browsers anchor edges during resize
+        // This avoids issues where some apps anchor edges during resize
 
         // Step 1: Move window to left edge to give it room to resize
         // Only do this if the window is not already near the left edge
@@ -158,64 +158,85 @@ class RealWindowManager: WindowManagerProtocol {
 
         // Step 4: Unified correction loop - some apps link position and size
         // Setting size can move the window, so we need to correct both together
+        // Some apps resize gradually and need multiple attempts
+        // Key insight from gTile: they don't use retry logic because GNOME API is synchronous
+        // But macOS AX API is asynchronous - we MUST retry until stable for ALL window types
         print("[WindowManager] Step 4: Unified correction loop")
-        let maxCorrectionAttempts = 6
+        let maxCorrectionAttempts = 10
         var positionOK = false
         var sizeOK = false
         var lastState = readWindowState(realWindow.axWindow)
+        var stuckCount = 0
 
         for attempt in 1...maxCorrectionAttempts {
             let state = readWindowState(realWindow.axWindow)
-            positionOK = abs(state.position.x - targetPosition.x) < 10 && abs(state.position.y - targetPosition.y) < 10
-            sizeOK = abs(state.size.width - targetSize.width) < 10 && abs(state.size.height - targetSize.height) < 10
 
-            // Check for minimum size constraint - don't keep retrying if size is larger than target
-            let sizeExceedsTarget = state.size.width > targetSize.width + 5 || state.size.height > targetSize.height + 5
-            if sizeExceedsTarget {
-                print("[WindowManager]   Attempt \(attempt): Size exceeds target (minimum constraint), accepting")
-                sizeOK = true // Accept this as OK
-            }
+            // Check position accuracy
+            positionOK = abs(state.position.x - targetPosition.x) < 10 && abs(state.position.y - targetPosition.y) < 10
+
+            // Check size accuracy
+            let widthOK = abs(state.size.width - targetSize.width) < 10
+            let heightOK = abs(state.size.height - targetSize.height) < 10
+            sizeOK = widthOK && heightOK
 
             if positionOK && sizeOK {
                 print("[WindowManager]   Attempt \(attempt): Both position and size OK")
                 break
             }
 
-            // Check if we're making progress - if state hasn't changed, we're stuck
-            if attempt > 2 && state.position == lastState.position && state.size == lastState.size {
-                print("[WindowManager]   Attempt \(attempt): No progress, stopping")
-                break
+            // Check if we're stuck - same state as last attempt
+            // Only consider minimum constraint if we're truly stuck (no change for 3+ attempts)
+            if state.position == lastState.position && state.size == lastState.size {
+                stuckCount += 1
+                if stuckCount >= 3 {
+                    // Now check if this looks like a minimum constraint
+                    let widthExceeds = state.size.width > targetSize.width + 5
+                    let heightExceeds = state.size.height > targetSize.height + 5
+                    let widthShort = state.size.width < targetSize.width - 10
+                    let heightShort = state.size.height < targetSize.height - 10
+
+                    if (widthExceeds || heightExceeds) && !widthShort && !heightShort {
+                        print("[WindowManager]   Attempt \(attempt): Stuck at minimum constraint (w:\(state.size.width) vs \(targetSize.width), h:\(state.size.height) vs \(targetSize.height))")
+                        sizeOK = true // Accept this as the best we can do
+                        break
+                    } else {
+                        print("[WindowManager]   Attempt \(attempt): Stuck (no progress for \(stuckCount) attempts), stopping")
+                        break
+                    }
+                }
+            } else {
+                stuckCount = 0 // Reset if we made progress
             }
             lastState = state
 
             print("[WindowManager]   Attempt \(attempt): pos=\(state.position) (ok=\(positionOK)), size=\(state.size) (ok=\(sizeOK))")
 
-            // Correct position first (more likely to stick)
-            if !positionOK {
-                var pos = targetPosition
-                if let posValue = AXValueCreate(.cgPoint, &pos) {
-                    AXUIElementSetAttributeValue(realWindow.axWindow, kAXPositionAttribute as CFString, posValue)
-                }
-                usleep(25000)
+            // Always set both size and position each iteration
+            // Set size first
+            var sz = targetSize
+            if let sizeValue = AXValueCreate(.cgSize, &sz) {
+                AXUIElementSetAttributeValue(realWindow.axWindow, kAXSizeAttribute as CFString, sizeValue)
             }
+            usleep(30000) // 30ms
 
-            // Then correct size
-            if !sizeOK && !sizeExceedsTarget {
-                var sz = targetSize
-                if let sizeValue = AXValueCreate(.cgSize, &sz) {
-                    AXUIElementSetAttributeValue(realWindow.axWindow, kAXSizeAttribute as CFString, sizeValue)
-                }
-                usleep(25000)
+            // Then set position
+            var pos = targetPosition
+            if let posValue = AXValueCreate(.cgPoint, &pos) {
+                AXUIElementSetAttributeValue(realWindow.axWindow, kAXPositionAttribute as CFString, posValue)
             }
+            usleep(25000)
 
-            // If size change might have moved window, re-correct position
-            if !sizeOK && !sizeExceedsTarget {
-                var pos = targetPosition
-                if let posValue = AXValueCreate(.cgPoint, &pos) {
-                    AXUIElementSetAttributeValue(realWindow.axWindow, kAXPositionAttribute as CFString, posValue)
-                }
-                usleep(25000)
+            // Set size again (position change can affect size)
+            if let sizeValue = AXValueCreate(.cgSize, &sz) {
+                AXUIElementSetAttributeValue(realWindow.axWindow, kAXSizeAttribute as CFString, sizeValue)
             }
+            usleep(25000)
+
+            // Final position adjustment (size change can affect position)
+            if let posValue = AXValueCreate(.cgPoint, &pos) {
+                AXUIElementSetAttributeValue(realWindow.axWindow, kAXPositionAttribute as CFString, posValue)
+            }
+            usleep(20000)
         }
 
         // Read final state

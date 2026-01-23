@@ -419,3 +419,219 @@ final class WindowManagementTests: XCTestCase {
         assertEqualWithAccuracy(manager.lastSetFrame?.width, 800, accuracy: 0.1)
     }
 }
+
+// MARK: - Resize State Checking Tests
+
+/// Tests for the logic that determines if a resize operation was successful
+/// These test the decision-making logic without needing actual AX API calls
+final class ResizeStateCheckingTests: XCTestCase {
+
+    // MARK: - Helper Functions (mirrors WindowManager logic)
+
+    /// Check if actual size is within tolerance of target
+    func isSizeOK(actual: CGSize, target: CGSize, tolerance: CGFloat = 10) -> Bool {
+        let widthOK = abs(actual.width - target.width) < tolerance
+        let heightOK = abs(actual.height - target.height) < tolerance
+        return widthOK && heightOK
+    }
+
+    /// Check if actual position is within tolerance of target
+    func isPositionOK(actual: CGPoint, target: CGPoint, tolerance: CGFloat = 10) -> Bool {
+        let xOK = abs(actual.x - target.x) < tolerance
+        let yOK = abs(actual.y - target.y) < tolerance
+        return xOK && yOK
+    }
+
+    /// Check if the size exceeds target in a way that indicates a minimum constraint
+    /// TRUE minimum constraint: size exceeds in one/both dimensions AND doesn't fall short in either
+    func isMinimumConstraint(actual: CGSize, target: CGSize, tolerance: CGFloat = 10) -> Bool {
+        let widthExceeds = actual.width > target.width + 5
+        let heightExceeds = actual.height > target.height + 5
+        let widthShort = actual.width < target.width - tolerance
+        let heightShort = actual.height < target.height - tolerance
+
+        return (widthExceeds || heightExceeds) && !widthShort && !heightShort
+    }
+
+    // MARK: - Size OK Tests
+
+    func testSizeOK_ExactMatch() {
+        let target = CGSize(width: 1290, height: 1415)
+        let actual = CGSize(width: 1290, height: 1415)
+        XCTAssertTrue(isSizeOK(actual: actual, target: target))
+    }
+
+    func testSizeOK_WithinTolerance() {
+        let target = CGSize(width: 1290, height: 1415)
+        let actual = CGSize(width: 1295, height: 1410) // 5 pixels off each
+        XCTAssertTrue(isSizeOK(actual: actual, target: target))
+    }
+
+    func testSizeOK_OutsideTolerance() {
+        let target = CGSize(width: 1290, height: 1415)
+        let actual = CGSize(width: 1320, height: 1415) // 30 pixels off width
+        XCTAssertFalse(isSizeOK(actual: actual, target: target))
+    }
+
+    func testSizeOK_BothDimensionsOff() {
+        let target = CGSize(width: 1290, height: 1415)
+        let actual = CGSize(width: 1320, height: 1380) // both off
+        XCTAssertFalse(isSizeOK(actual: actual, target: target))
+    }
+
+    // MARK: - Minimum Constraint Detection Tests
+
+    func testMinimumConstraint_WidthExceedsHeightOK() {
+        // Browser has minimum width of 500, we asked for 400
+        let target = CGSize(width: 400, height: 1000)
+        let actual = CGSize(width: 500, height: 1000)
+        XCTAssertTrue(isMinimumConstraint(actual: actual, target: target))
+    }
+
+    func testMinimumConstraint_HeightExceedsWidthOK() {
+        // App has minimum height of 600, we asked for 500
+        let target = CGSize(width: 1000, height: 500)
+        let actual = CGSize(width: 1000, height: 600)
+        XCTAssertTrue(isMinimumConstraint(actual: actual, target: target))
+    }
+
+    func testMinimumConstraint_BothExceed() {
+        // App has minimum size larger than requested
+        let target = CGSize(width: 400, height: 300)
+        let actual = CGSize(width: 500, height: 400)
+        XCTAssertTrue(isMinimumConstraint(actual: actual, target: target))
+    }
+
+    func testMinimumConstraint_WidthExceedsHeightShort() {
+        // This is NOT a minimum constraint - height is SHORT
+        // This happens when browser is fighting with us
+        let target = CGSize(width: 1290, height: 1415)
+        let actual = CGSize(width: 1484, height: 1097) // width exceeds, height short
+        XCTAssertFalse(isMinimumConstraint(actual: actual, target: target))
+    }
+
+    func testMinimumConstraint_HeightExceedsWidthShort() {
+        // This is NOT a minimum constraint - width is SHORT
+        let target = CGSize(width: 1500, height: 800)
+        let actual = CGSize(width: 1200, height: 900) // height exceeds, width short
+        XCTAssertFalse(isMinimumConstraint(actual: actual, target: target))
+    }
+
+    func testMinimumConstraint_BothShort() {
+        // Definitely not a minimum constraint - app didn't even try
+        let target = CGSize(width: 1500, height: 1200)
+        let actual = CGSize(width: 1200, height: 1000)
+        XCTAssertFalse(isMinimumConstraint(actual: actual, target: target))
+    }
+
+    func testMinimumConstraint_SizeMatches() {
+        // Size matches - no minimum constraint issue
+        let target = CGSize(width: 1290, height: 1415)
+        let actual = CGSize(width: 1290, height: 1415)
+        XCTAssertFalse(isMinimumConstraint(actual: actual, target: target))
+    }
+
+    func testMinimumConstraint_SlightlyOver() {
+        // Within tolerance - not considered exceeding
+        let target = CGSize(width: 1290, height: 1415)
+        let actual = CGSize(width: 1293, height: 1418) // 3 pixels over each
+        XCTAssertFalse(isMinimumConstraint(actual: actual, target: target))
+    }
+
+    // MARK: - Position OK Tests
+
+    func testPositionOK_ExactMatch() {
+        let target = CGPoint(x: 860, y: 25)
+        let actual = CGPoint(x: 860, y: 25)
+        XCTAssertTrue(isPositionOK(actual: actual, target: target))
+    }
+
+    func testPositionOK_WithinTolerance() {
+        let target = CGPoint(x: 860, y: 25)
+        let actual = CGPoint(x: 865, y: 28) // 5 and 3 pixels off
+        XCTAssertTrue(isPositionOK(actual: actual, target: target))
+    }
+
+    func testPositionOK_OutsideTolerance() {
+        let target = CGPoint(x: 860, y: 25)
+        let actual = CGPoint(x: 900, y: 25) // 40 pixels off
+        XCTAssertFalse(isPositionOK(actual: actual, target: target))
+    }
+
+    func testPositionOK_PositionDriftedDuringResize() {
+        // This scenario: we set position to 1290, then resized, and it drifted to 295
+        let target = CGPoint(x: 1290, y: 25)
+        let actual = CGPoint(x: 295, y: 25) // massive drift
+        XCTAssertFalse(isPositionOK(actual: actual, target: target))
+    }
+
+    // MARK: - Combined Scenario Tests (Real-world cases from logs)
+
+    func testScenario_BrowserFightingResize() {
+        // From logs: Target (1290, 1415), got (1484, 1097)
+        // Browser is fighting - width exceeds but height is SHORT
+        // This is NOT a minimum constraint - need to keep retrying
+        let targetSize = CGSize(width: 1290, height: 1415)
+        let actualSize = CGSize(width: 1484, height: 1097)
+
+        XCTAssertFalse(isSizeOK(actual: actualSize, target: targetSize))
+        XCTAssertFalse(isMinimumConstraint(actual: actualSize, target: targetSize))
+        // Should NOT accept this as OK - need to retry
+    }
+
+    func testScenario_IntermediateSizeDuringResize() {
+        // From logs: When shrinking from 1415 to 707.5 height, browser gave 1073
+        // This is NOT a minimum constraint - it's an intermediate value
+        // We've seen the browser go to 707-708 height successfully before
+        let targetSize = CGSize(width: 1720, height: 707.5)
+        let actualSize = CGSize(width: 1720, height: 1073)
+
+        XCTAssertFalse(isSizeOK(actual: actualSize, target: targetSize))
+        // Height exceeds but this should NOT be accepted on first attempt
+        // Only accept as minimum constraint if stuck for 3+ attempts
+        // The isMinimumConstraint function returns true, but the actual
+        // WindowManager logic only uses it after being stuck
+        XCTAssertTrue(isMinimumConstraint(actual: actualSize, target: targetSize))
+        // Key insight: The function says it's a constraint, but we shouldn't
+        // ACCEPT it until we've been stuck for 3+ attempts
+    }
+
+    func testScenario_GradualResizeProgress() {
+        // From logs: size gradually approaching target
+        // 1456 -> 1536 -> 1680 -> 1712 (target 1720)
+        let targetSize = CGSize(width: 1720, height: 1415)
+
+        XCTAssertFalse(isSizeOK(actual: CGSize(width: 1456, height: 1415), target: targetSize))
+        XCTAssertFalse(isSizeOK(actual: CGSize(width: 1536, height: 1415), target: targetSize))
+        XCTAssertFalse(isSizeOK(actual: CGSize(width: 1680, height: 1415), target: targetSize))
+        XCTAssertTrue(isSizeOK(actual: CGSize(width: 1712, height: 1415), target: targetSize)) // within tolerance
+    }
+
+    func testScenario_TrueMinimumWidthConstraint() {
+        // From logs: Fusion app has minimum width of 1200
+        // Target: 860, Actual: 1200
+        let targetSize = CGSize(width: 860, height: 1415)
+        let actualSize = CGSize(width: 1200, height: 1415)
+
+        XCTAssertFalse(isSizeOK(actual: actualSize, target: targetSize))
+        XCTAssertTrue(isMinimumConstraint(actual: actualSize, target: targetSize))
+        // This IS a minimum constraint - should accept
+    }
+
+    func testScenario_SmallSizeVariationFromBrowser() {
+        // Browsers often give sizes like 1724 instead of 1720
+        let targetSize = CGSize(width: 1720, height: 1415)
+        let actualSize = CGSize(width: 1724, height: 1415)
+
+        XCTAssertTrue(isSizeOK(actual: actualSize, target: targetSize)) // within tolerance
+    }
+
+    func testScenario_PositionDriftAfterSizeChange() {
+        // From logs: Position was (1290, 25) then drifted to (295, 25) after size change
+        let targetPos = CGPoint(x: 1290, y: 25)
+        let actualPos = CGPoint(x: 295, y: 25)
+
+        XCTAssertFalse(isPositionOK(actual: actualPos, target: targetPos))
+        // Should detect this and re-correct position
+    }
+}
