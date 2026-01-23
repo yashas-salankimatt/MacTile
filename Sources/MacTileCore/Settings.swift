@@ -230,6 +230,9 @@ public struct MacTileSettings: Codable, Equatable {
     /// Show icon in menu bar
     public var showMenuBarIcon: Bool
 
+    /// Launch MacTile when user logs in
+    public var launchAtLogin: Bool
+
     // MARK: - Keyboard Shortcuts
 
     /// Global shortcut to toggle overlay (primary)
@@ -262,6 +265,7 @@ public struct MacTileSettings: Codable, Equatable {
         insets: .zero,
         autoClose: true,
         showMenuBarIcon: true,
+        launchAtLogin: false,
         toggleOverlayShortcut: .defaultToggleOverlay,
         secondaryToggleOverlayShortcut: .defaultSecondaryToggleOverlay,
         overlayKeyboard: .default,
@@ -274,6 +278,7 @@ public struct MacTileSettings: Codable, Equatable {
         insets: EdgeInsets,
         autoClose: Bool,
         showMenuBarIcon: Bool,
+        launchAtLogin: Bool,
         toggleOverlayShortcut: KeyboardShortcut,
         secondaryToggleOverlayShortcut: KeyboardShortcut?,
         overlayKeyboard: OverlayKeyboardSettings,
@@ -284,6 +289,7 @@ public struct MacTileSettings: Codable, Equatable {
         self.insets = insets
         self.autoClose = autoClose
         self.showMenuBarIcon = showMenuBarIcon
+        self.launchAtLogin = launchAtLogin
         self.toggleOverlayShortcut = toggleOverlayShortcut
         self.secondaryToggleOverlayShortcut = secondaryToggleOverlayShortcut
         self.overlayKeyboard = overlayKeyboard

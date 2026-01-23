@@ -16,6 +16,7 @@ class SettingsWindowController: NSWindowController {
     private var insetRightField: NSTextField!
     private var autoCloseCheckbox: NSButton!
     private var showIconCheckbox: NSButton!
+    private var launchAtLoginCheckbox: NSButton!
 
     // Shortcuts tab - Primary
     private var shortcutField: NSTextField!
@@ -91,6 +92,10 @@ class SettingsWindowController: NSWindowController {
         let appearanceTab = createAppearanceTab()
         appearanceTab.label = "Appearance"
         tabView.addTabViewItem(appearanceTab)
+
+        let aboutTab = createAboutTab()
+        aboutTab.label = "About"
+        tabView.addTabViewItem(aboutTab)
 
         window.contentView?.addSubview(tabView)
 
@@ -206,6 +211,11 @@ class SettingsWindowController: NSWindowController {
         showIconCheckbox = NSButton(checkboxWithTitle: "Show icon in menu bar", target: nil, action: nil)
         showIconCheckbox.frame = NSRect(x: 20, y: y, width: 350, height: 20)
         view.addSubview(showIconCheckbox)
+        y -= 25
+
+        launchAtLoginCheckbox = NSButton(checkboxWithTitle: "Launch MacTile at login", target: nil, action: nil)
+        launchAtLoginCheckbox.frame = NSRect(x: 20, y: y, width: 350, height: 20)
+        view.addSubview(launchAtLoginCheckbox)
 
         item.view = view
         return item
@@ -472,6 +482,143 @@ class SettingsWindowController: NSWindowController {
         return item
     }
 
+    private func createAboutTab() -> NSTabViewItem {
+        let item = NSTabViewItem()
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 400))
+
+        let centerX = view.bounds.width / 2
+
+        // App icon
+        let iconSize: CGFloat = 128
+        let iconView = NSImageView(frame: NSRect(
+            x: centerX - iconSize / 2,
+            y: 220,
+            width: iconSize,
+            height: iconSize
+        ))
+
+        // Try to load the app icon from multiple sources
+        iconView.image = loadAppIcon()
+        iconView.imageScaling = .scaleProportionallyUpOrDown
+        view.addSubview(iconView)
+
+        // App name
+        let nameLabel = NSTextField(frame: NSRect(x: 0, y: 180, width: view.bounds.width, height: 30))
+        nameLabel.stringValue = "MacTile"
+        nameLabel.font = NSFont.systemFont(ofSize: 24, weight: .bold)
+        nameLabel.alignment = .center
+        nameLabel.isBordered = false
+        nameLabel.isEditable = false
+        nameLabel.isSelectable = false
+        nameLabel.backgroundColor = .clear
+        view.addSubview(nameLabel)
+
+        // Version
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+        let versionLabel = NSTextField(frame: NSRect(x: 0, y: 155, width: view.bounds.width, height: 20))
+        versionLabel.stringValue = "Version \(version)"
+        versionLabel.font = NSFont.systemFont(ofSize: 13)
+        versionLabel.textColor = .secondaryLabelColor
+        versionLabel.alignment = .center
+        versionLabel.isBordered = false
+        versionLabel.isEditable = false
+        versionLabel.isSelectable = false
+        versionLabel.backgroundColor = .clear
+        view.addSubview(versionLabel)
+
+        // Description
+        let descLabel = NSTextField(frame: NSRect(x: 40, y: 115, width: view.bounds.width - 80, height: 30))
+        descLabel.stringValue = "A macOS window tiling app inspired by gTile"
+        descLabel.font = NSFont.systemFont(ofSize: 13)
+        descLabel.textColor = .secondaryLabelColor
+        descLabel.alignment = .center
+        descLabel.isBordered = false
+        descLabel.isEditable = false
+        descLabel.isSelectable = false
+        descLabel.backgroundColor = .clear
+        view.addSubview(descLabel)
+
+        // GitHub link button
+        let githubButton = NSButton(frame: NSRect(x: centerX - 100, y: 70, width: 200, height: 30))
+        githubButton.title = "GitHub Repository"
+        githubButton.bezelStyle = .rounded
+        githubButton.target = self
+        githubButton.action = #selector(openGitHubRepo)
+        view.addSubview(githubButton)
+
+        // GitHub URL label
+        let urlLabel = NSTextField(frame: NSRect(x: 0, y: 45, width: view.bounds.width, height: 20))
+        urlLabel.stringValue = "github.com/yashas-salankimatt/MacTile"
+        urlLabel.font = NSFont.systemFont(ofSize: 11)
+        urlLabel.textColor = .tertiaryLabelColor
+        urlLabel.alignment = .center
+        urlLabel.isBordered = false
+        urlLabel.isEditable = false
+        urlLabel.isSelectable = true
+        urlLabel.backgroundColor = .clear
+        view.addSubview(urlLabel)
+
+        item.view = view
+        return item
+    }
+
+    @objc private func openGitHubRepo() {
+        if let url = URL(string: "https://github.com/yashas-salankimatt/MacTile") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func loadAppIcon() -> NSImage? {
+        // 1. Try loading from bundle resources (when running as .app)
+        if let bundleIcon = Bundle.main.image(forResource: "AppIcon") {
+            return bundleIcon
+        }
+
+        // 2. Try the application icon name (when running as .app)
+        if let appIcon = NSImage(named: NSImage.applicationIconName),
+           appIcon.size.width > 0 {
+            return appIcon
+        }
+
+        // 3. Try loading from Resources directory relative to executable (development)
+        let executableURL = Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])
+
+        // When running via swift run, executable is in .build/debug/
+        // Resources are in project root /Resources/
+        var resourcesURL = executableURL
+            .deletingLastPathComponent() // Remove executable name
+            .deletingLastPathComponent() // Remove 'debug'
+            .deletingLastPathComponent() // Remove '.build'
+            .appendingPathComponent("Resources")
+            .appendingPathComponent("AppIcon.icns")
+
+        if let icon = NSImage(contentsOf: resourcesURL) {
+            return icon
+        }
+
+        // 4. Also try going up from .build/arm64-apple-macosx/debug/ structure
+        resourcesURL = executableURL
+            .deletingLastPathComponent() // Remove executable name
+            .deletingLastPathComponent() // Remove 'debug'
+            .deletingLastPathComponent() // Remove 'arm64-apple-macosx'
+            .deletingLastPathComponent() // Remove '.build'
+            .appendingPathComponent("Resources")
+            .appendingPathComponent("AppIcon.icns")
+
+        if let icon = NSImage(contentsOf: resourcesURL) {
+            return icon
+        }
+
+        // 5. Fall back to system grid icon
+        if let gridIcon = NSImage(systemSymbolName: "square.grid.3x3", accessibilityDescription: "MacTile") {
+            // Make it larger and more visible
+            let config = NSImage.SymbolConfiguration(pointSize: 64, weight: .regular)
+            return gridIcon.withSymbolConfiguration(config)
+        }
+
+        return nil
+    }
+
     // MARK: - Appearance Slider Actions
 
     @objc private func overlayOpacityChanged() {
@@ -523,6 +670,7 @@ class SettingsWindowController: NSWindowController {
         // Behavior
         autoCloseCheckbox.state = settings.autoClose ? .on : .off
         showIconCheckbox.state = settings.showMenuBarIcon ? .on : .off
+        launchAtLoginCheckbox.state = settings.launchAtLogin ? .on : .off
 
         // Primary shortcut
         shortcutField.stringValue = settings.toggleOverlayShortcut.displayString
@@ -828,6 +976,7 @@ class SettingsWindowController: NSWindowController {
         // Update behavior
         SettingsManager.shared.updateAutoClose(autoCloseCheckbox.state == .on)
         SettingsManager.shared.updateShowMenuBarIcon(showIconCheckbox.state == .on)
+        SettingsManager.shared.updateLaunchAtLogin(launchAtLoginCheckbox.state == .on)
 
         // Update primary shortcut
         if let shortcut = recordedShortcut {

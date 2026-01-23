@@ -26,6 +26,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Register global hotkey from settings
         setupHotKey()
 
+        // Sync launch at login with system state
+        syncLaunchAtLogin()
+
         // Observe settings changes
         observeSettings()
 
@@ -56,8 +59,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = SettingsManager.shared.settings
         statusItem?.isVisible = settings.showMenuBarIcon
 
+        // Update launch at login
+        LaunchAtLoginManager.shared.setEnabled(settings.launchAtLogin)
+
         // Rebuild menu to show updated shortcuts and presets
         rebuildMenu()
+    }
+
+    private func syncLaunchAtLogin() {
+        // Sync our stored setting with actual system state
+        let settings = SettingsManager.shared.settings
+        let actuallyEnabled = LaunchAtLoginManager.shared.isEnabled
+
+        if settings.launchAtLogin != actuallyEnabled {
+            // If setting says enabled but system says not, try to enable
+            // If setting says disabled but system says enabled, disable
+            LaunchAtLoginManager.shared.setEnabled(settings.launchAtLogin)
+        }
     }
 
     private func checkAccessibilityPermissions() {
