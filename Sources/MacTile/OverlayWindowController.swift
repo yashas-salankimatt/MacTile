@@ -17,6 +17,25 @@ class OverlayWindowController: NSWindowController {
     // Store reference to the window we want to tile (before overlay appears)
     private var targetWindow: WindowInfo?
 
+    // Multi-monitor support
+    private var currentMonitorIndex: Int = 0
+
+    // Computed properties for multi-monitor
+    private var allScreens: [NSScreen] {
+        return NSScreen.screens
+    }
+
+    private var currentScreen: NSScreen? {
+        guard currentMonitorIndex >= 0 && currentMonitorIndex < allScreens.count else {
+            return NSScreen.main
+        }
+        return allScreens[currentMonitorIndex]
+    }
+
+    private var monitorCount: Int {
+        return allScreens.count
+    }
+
     // Settings observer
     private var settingsObserver: NSObjectProtocol?
 
@@ -126,6 +145,12 @@ class OverlayWindowController: NSWindowController {
         gridView.onGridSizeChanged = { [weak self] newSize in
             self?.gridSize = newSize
         }
+        gridView.onNextMonitor = { [weak self] in
+            self?.moveToNextMonitor()
+        }
+        gridView.onPreviousMonitor = { [weak self] in
+            self?.moveToPreviousMonitor()
+        }
         contentView.addSubview(gridView)
         self.gridView = gridView
 
@@ -148,8 +173,6 @@ class OverlayWindowController: NSWindowController {
     }
 
     func showOverlay() {
-        guard let screen = NSScreen.main else { return }
-
         // Reload settings when showing overlay
         reloadSettings()
 
@@ -157,7 +180,17 @@ class OverlayWindowController: NSWindowController {
         targetWindow = RealWindowManager.shared.getFocusedWindow()
         print("Captured target window: \(targetWindow?.title ?? "none")")
 
-        // Calculate initial selection based on current window position
+        // Determine which monitor to show the overlay on
+        if let targetWindow = targetWindow {
+            currentMonitorIndex = monitorIndexForWindow(targetWindow)
+            print("[Monitor] Target window is on monitor \(currentMonitorIndex + 1)/\(monitorCount)")
+        } else {
+            currentMonitorIndex = 0
+        }
+
+        guard let screen = currentScreen else { return }
+
+        // Calculate initial selection based on current window position on that monitor
         let initialSelection: GridSelection
         if let targetWindow = targetWindow {
             initialSelection = GridOperations.rectToSelection(
@@ -184,6 +217,10 @@ class OverlayWindowController: NSWindowController {
         if let gridView = gridView {
             let success = window?.makeFirstResponder(gridView) ?? false
             print("Made gridView first responder: \(success)")
+
+            // Update monitor info in grid view
+            gridView.currentMonitorIndex = currentMonitorIndex
+            gridView.totalMonitors = monitorCount
         }
 
         // Set initial selection to match window position
@@ -201,6 +238,60 @@ class OverlayWindowController: NSWindowController {
         }
 
         targetWindow = nil
+    }
+
+    // MARK: - Multi-Monitor Support
+
+    func moveToNextMonitor() {
+        guard monitorCount > 1 else { return }
+        let nextIndex = (currentMonitorIndex + 1) % monitorCount
+        moveToMonitor(index: nextIndex)
+    }
+
+    func moveToPreviousMonitor() {
+        guard monitorCount > 1 else { return }
+        let prevIndex = (currentMonitorIndex - 1 + monitorCount) % monitorCount
+        moveToMonitor(index: prevIndex)
+    }
+
+    private func moveToMonitor(index: Int) {
+        guard index >= 0 && index < allScreens.count else { return }
+        currentMonitorIndex = index
+
+        guard let screen = currentScreen else { return }
+
+        print("[Monitor] Switching to monitor \(index + 1)/\(monitorCount)")
+
+        // Move and resize overlay to new monitor
+        window?.setFrame(screen.frame, display: true)
+
+        // Update grid view frame
+        if let contentView = window?.contentView {
+            gridView?.frame = contentView.bounds
+        }
+
+        // Update monitor info in grid view
+        gridView?.currentMonitorIndex = currentMonitorIndex
+        gridView?.totalMonitors = monitorCount
+        gridView?.needsDisplay = true
+    }
+
+    /// Find which monitor contains the given point (window center)
+    private func monitorIndexForPoint(_ point: CGPoint) -> Int {
+        for (index, screen) in allScreens.enumerated() {
+            if screen.frame.contains(point) {
+                return index
+            }
+        }
+        return 0 // Default to first monitor
+    }
+
+    /// Find which monitor the window is primarily on
+    private func monitorIndexForWindow(_ window: WindowInfo) -> Int {
+        // Use window center to determine which monitor it's on
+        let centerX = window.frame.origin.x + window.frame.width / 2
+        let centerY = window.frame.origin.y + window.frame.height / 2
+        return monitorIndexForPoint(CGPoint(x: centerX, y: centerY))
     }
 
     private func applySelection(_ selection: GridSelection) {
@@ -234,12 +325,14 @@ class OverlayWindowController: NSWindowController {
 
         // Use the captured window if available
         if let targetWindow = windowToTile {
-            guard let screen = RealWindowManager.shared.getMainScreen() else {
-                print("No main screen found")
+            // Use the current monitor (where overlay is displayed) for tiling
+            guard let screen = currentScreen else {
+                print("No current screen found")
                 return
             }
 
             print("[ApplySelection] ═══════════════════════════════════════════════")
+            print("[ApplySelection] Tiling to monitor \(currentMonitorIndex + 1)/\(monitorCount)")
             print("[ApplySelection] Grid size: \(gridSize.cols)x\(gridSize.rows)")
             print("[ApplySelection] Selection: anchor=(\(selection.anchor.col),\(selection.anchor.row)) target=(\(selection.target.col),\(selection.target.row))")
             print("[ApplySelection] Normalized: \(selection.normalized)")
@@ -303,9 +396,19 @@ class GridOverlayView: NSView {
     var onSelectionConfirmed: ((GridSelection) -> Void)?
     var onCancel: (() -> Void)?
     var onGridSizeChanged: ((GridSize) -> Void)?
+    var onNextMonitor: (() -> Void)?
+    var onPreviousMonitor: (() -> Void)?
 
     private var isSelecting = false
     private var selectionAnchor: GridOffset?
+
+    // Multi-monitor info (for display)
+    var currentMonitorIndex: Int = 0 {
+        didSet { needsDisplay = true }
+    }
+    var totalMonitors: Int = 1 {
+        didSet { needsDisplay = true }
+    }
 
     var gridPresets: [GridSize]
     var keyboardSettings: OverlayKeyboardSettings
@@ -437,6 +540,20 @@ class GridOverlayView: NSView {
             withAttributes: gridLabelAttrs
         )
 
+        // Draw monitor indicator (when multiple monitors)
+        if totalMonitors > 1 {
+            let monitorLabel = "Monitor \(currentMonitorIndex + 1)/\(totalMonitors)"
+            let monitorLabelAttrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.monospacedSystemFont(ofSize: 18, weight: .medium),
+                .foregroundColor: NSColor.white.withAlphaComponent(0.9)
+            ]
+            let monitorLabelSize = monitorLabel.size(withAttributes: monitorLabelAttrs)
+            monitorLabel.draw(
+                at: CGPoint(x: bounds.width - monitorLabelSize.width - 20, y: 50),
+                withAttributes: monitorLabelAttrs
+            )
+        }
+
         // Draw instructions at top
         let panMod = OverlayKeyboardSettings.modifierDisplayString(keyboardSettings.panModifier)
         let anchorMod = OverlayKeyboardSettings.modifierDisplayString(keyboardSettings.anchorModifier)
@@ -444,7 +561,14 @@ class GridOverlayView: NSView {
         let panStr = panMod == "None" ? "Arrows" : "\(panMod)+Arrows"
         let anchorStr = anchorMod == "None" ? "Arrows" : "\(anchorMod)+Arrows"
         let targetStr = targetMod == "None" ? "Arrows" : "\(targetMod)+Arrows"
-        let instructions = "\(panStr): Pan | \(anchorStr): 1st corner | \(targetStr): 2nd corner | Enter: Apply | Esc: Cancel"
+
+        var instructions = "\(panStr): Pan | \(anchorStr): 1st corner | \(targetStr): 2nd corner | Enter: Apply | Esc: Cancel"
+
+        // Add Tab instruction when multiple monitors
+        if totalMonitors > 1 {
+            instructions += " | Tab: Switch Monitor"
+        }
+
         let instrAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 16, weight: .medium),
             .foregroundColor: NSColor.white
@@ -556,6 +680,20 @@ class GridOverlayView: NSView {
 
         if event.keyCode == keyboardSettings.cycleGridKeyCode {
             cycleGridSize()
+            return
+        }
+
+        // Handle Tab for monitor switching (only when multiple monitors)
+        if event.keyCode == 48 { // Tab key
+            if totalMonitors > 1 {
+                if modifiers.contains(.shift) {
+                    print("[Monitor] Shift+Tab pressed - previous monitor")
+                    onPreviousMonitor?()
+                } else {
+                    print("[Monitor] Tab pressed - next monitor")
+                    onNextMonitor?()
+                }
+            }
             return
         }
 
