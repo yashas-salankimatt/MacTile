@@ -36,6 +36,13 @@ class RealWindowManager: WindowManagerProtocol {
 
     private init() {}
 
+    /// Get the primary screen height for AX coordinate conversion
+    /// The AX coordinate system uses the primary display (with menu bar) as reference
+    /// This is always NSScreen.screens[0] according to Apple documentation
+    private var primaryScreenHeight: CGFloat {
+        return NSScreen.screens.first?.frame.height ?? 0
+    }
+
     func getFocusedWindow() -> WindowInfo? {
         guard let frontApp = NSWorkspace.shared.frontmostApplication else {
             return nil
@@ -101,13 +108,19 @@ class RealWindowManager: WindowManagerProtocol {
             return false
         }
 
-        guard let screen = NSScreen.main else {
-            print("[WindowManager] ERROR: No main screen")
+        // Use primary screen for AX coordinate conversion
+        // AX coordinates have origin at top-left of the PRIMARY display (with menu bar)
+        // NSScreen.main returns the screen with keyboard focus, which may not be the primary
+        guard let primaryScreen = NSScreen.screens.first else {
+            print("[WindowManager] ERROR: No screens available")
             return false
         }
 
-        let screenHeight = screen.frame.height
-        let screenWidth = screen.frame.width
+        let screenHeight = primaryScreen.frame.height
+        let screenWidth = primaryScreen.frame.width
+
+        // Convert from NSScreen coords (bottom-left origin) to AX coords (top-left origin)
+        // The conversion uses the primary screen height as the reference
         let axY = screenHeight - frame.origin.y - frame.height
 
         let targetSize = CGSize(width: frame.width, height: frame.height)
@@ -117,7 +130,7 @@ class RealWindowManager: WindowManagerProtocol {
         print("[WindowManager] Target frame (screen coords): \(frame)")
         print("[WindowManager] Target position (AX coords): \(targetPosition)")
         print("[WindowManager] Target size: \(targetSize)")
-        print("[WindowManager] Screen: \(screenWidth) x \(screenHeight)")
+        print("[WindowManager] Primary screen height: \(screenHeight)")
 
         // Read current window state before changes
         let beforeState = readWindowState(realWindow.axWindow)
@@ -445,8 +458,8 @@ class RealWindowManager: WindowManagerProtocol {
         }
 
         // Convert from AX coordinates (top-left origin) to screen coordinates (bottom-left origin)
-        let screenHeight = NSScreen.main?.frame.height ?? 0
-        let convertedY = screenHeight - position.y - size.height
+        // Use primary screen height as AX coordinates are relative to the primary display
+        let convertedY = primaryScreenHeight - position.y - size.height
 
         let frame = CGRect(x: position.x, y: convertedY, width: size.width, height: size.height)
 

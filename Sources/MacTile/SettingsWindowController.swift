@@ -17,6 +17,7 @@ class SettingsWindowController: NSWindowController {
     private var autoCloseCheckbox: NSButton!
     private var showIconCheckbox: NSButton!
     private var launchAtLoginCheckbox: NSButton!
+    private var confirmOnClickCheckbox: NSButton!
     private var showHelpTextCheckbox: NSButton!
     private var showMonitorIndicatorCheckbox: NSButton!
 
@@ -218,6 +219,11 @@ class SettingsWindowController: NSWindowController {
         launchAtLoginCheckbox = NSButton(checkboxWithTitle: "Launch MacTile at login", target: nil, action: nil)
         launchAtLoginCheckbox.frame = NSRect(x: 20, y: y, width: 350, height: 20)
         view.addSubview(launchAtLoginCheckbox)
+        y -= 25
+
+        confirmOnClickCheckbox = NSButton(checkboxWithTitle: "Click without drag confirms selection", target: nil, action: nil)
+        confirmOnClickCheckbox.frame = NSRect(x: 20, y: y, width: 350, height: 20)
+        view.addSubview(confirmOnClickCheckbox)
         y -= 30
 
         // Overlay Display Section
@@ -532,7 +538,7 @@ class SettingsWindowController: NSWindowController {
         view.addSubview(nameLabel)
 
         // Version
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.1"
         let versionLabel = NSTextField(frame: NSRect(x: 0, y: 215, width: view.bounds.width, height: 20))
         versionLabel.stringValue = "Version \(version)"
         versionLabel.font = NSFont.systemFont(ofSize: 13)
@@ -689,6 +695,7 @@ class SettingsWindowController: NSWindowController {
         autoCloseCheckbox.state = settings.autoClose ? .on : .off
         showIconCheckbox.state = settings.showMenuBarIcon ? .on : .off
         launchAtLoginCheckbox.state = settings.launchAtLogin ? .on : .off
+        confirmOnClickCheckbox.state = settings.confirmOnClickWithoutDrag ? .on : .off
 
         // Overlay Display
         showHelpTextCheckbox.state = settings.showHelpText ? .on : .off
@@ -999,6 +1006,7 @@ class SettingsWindowController: NSWindowController {
         SettingsManager.shared.updateAutoClose(autoCloseCheckbox.state == .on)
         SettingsManager.shared.updateShowMenuBarIcon(showIconCheckbox.state == .on)
         SettingsManager.shared.updateLaunchAtLogin(launchAtLoginCheckbox.state == .on)
+        SettingsManager.shared.updateConfirmOnClickWithoutDrag(confirmOnClickCheckbox.state == .on)
 
         // Update overlay display
         SettingsManager.shared.updateShowHelpText(showHelpTextCheckbox.state == .on)

@@ -233,6 +233,10 @@ public struct MacTileSettings: Codable, Equatable {
     /// Launch MacTile when user logs in
     public var launchAtLogin: Bool
 
+    /// When true, clicking without dragging confirms the current selection
+    /// When false, clicking without dragging selects the single cell at click position
+    public var confirmOnClickWithoutDrag: Bool
+
     // MARK: - Overlay Display
 
     /// Show help text at the top of the overlay
@@ -274,6 +278,7 @@ public struct MacTileSettings: Codable, Equatable {
         autoClose: true,
         showMenuBarIcon: true,
         launchAtLogin: false,
+        confirmOnClickWithoutDrag: true,
         showHelpText: true,
         showMonitorIndicator: true,
         toggleOverlayShortcut: .defaultToggleOverlay,
@@ -289,6 +294,7 @@ public struct MacTileSettings: Codable, Equatable {
         autoClose: Bool,
         showMenuBarIcon: Bool,
         launchAtLogin: Bool,
+        confirmOnClickWithoutDrag: Bool,
         showHelpText: Bool,
         showMonitorIndicator: Bool,
         toggleOverlayShortcut: KeyboardShortcut,
@@ -302,6 +308,7 @@ public struct MacTileSettings: Codable, Equatable {
         self.autoClose = autoClose
         self.showMenuBarIcon = showMenuBarIcon
         self.launchAtLogin = launchAtLogin
+        self.confirmOnClickWithoutDrag = confirmOnClickWithoutDrag
         self.showHelpText = showHelpText
         self.showMonitorIndicator = showMonitorIndicator
         self.toggleOverlayShortcut = toggleOverlayShortcut

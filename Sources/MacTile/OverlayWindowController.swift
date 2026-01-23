@@ -20,6 +20,13 @@ class OverlayWindowController: NSWindowController {
     // Multi-monitor support
     private var currentMonitorIndex: Int = 0
 
+    // Mouse-based monitor switching
+    private var globalMouseMonitor: Any?
+    private var localMouseMonitor: Any?
+    private var lastMousePosition: CGPoint?
+    private var mouseMovementOnOtherMonitor: CGFloat = 0
+    private let mouseMovementThreshold: CGFloat = 50 // pixels of movement required to switch
+
     // Computed properties for multi-monitor
     private var allScreens: [NSScreen] {
         return NSScreen.screens
@@ -93,6 +100,7 @@ class OverlayWindowController: NSWindowController {
         if let observer = settingsObserver {
             NotificationCenter.default.removeObserver(observer)
         }
+        stopMouseMonitoring()
     }
 
     private func observeSettings() {
@@ -114,6 +122,7 @@ class OverlayWindowController: NSWindowController {
         gridView?.appearanceSettings = settings.appearance
         gridView?.showHelpText = settings.showHelpText
         gridView?.showMonitorIndicator = settings.showMonitorIndicator
+        gridView?.confirmOnClickWithoutDrag = settings.confirmOnClickWithoutDrag
 
         // Update panel background
         let appearance = settings.appearance
@@ -140,6 +149,7 @@ class OverlayWindowController: NSWindowController {
         gridView.autoresizingMask = [.width, .height]
         gridView.showHelpText = settings.showHelpText
         gridView.showMonitorIndicator = settings.showMonitorIndicator
+        gridView.confirmOnClickWithoutDrag = settings.confirmOnClickWithoutDrag
         gridView.onSelectionConfirmed = { [weak self] selection in
             self?.applySelection(selection)
         }
@@ -221,9 +231,8 @@ class OverlayWindowController: NSWindowController {
         let viewFrame = NSRect(origin: .zero, size: screen.frame.size)
         gridView?.frame = viewFrame
 
-        // Calculate top safe area (menu bar height)
-        let topInset = screen.frame.maxY - screen.visibleFrame.maxY
-        gridView?.topSafeAreaInset = max(0, topInset)
+        // Calculate safe area insets (menu bar, dock, etc.)
+        updateGridViewSafeAreaInsets(for: screen)
 
         // Make the grid view first responder for keyboard input
         if let gridView = gridView {
@@ -239,9 +248,14 @@ class OverlayWindowController: NSWindowController {
         currentSelection = initialSelection
         gridView?.selection = currentSelection
         gridView?.needsDisplay = true
+
+        // Start mouse monitoring for multi-monitor switching
+        startMouseMonitoring()
     }
 
     func hideOverlay(cancelled: Bool = false) {
+        // Stop mouse monitoring
+        stopMouseMonitoring()
         window?.orderOut(nil)
 
         // Return focus to target window if we're cancelling
@@ -285,10 +299,8 @@ class OverlayWindowController: NSWindowController {
         // Force the content view to layout
         window?.contentView?.layoutSubtreeIfNeeded()
 
-        // Calculate top safe area (menu bar height)
-        // Menu bar is at the top, so it's the difference between frame.maxY and visibleFrame.maxY
-        let topInset = screen.frame.maxY - screen.visibleFrame.maxY
-        gridView?.topSafeAreaInset = max(0, topInset)
+        // Calculate safe area insets (menu bar, dock, etc.)
+        updateGridViewSafeAreaInsets(for: screen)
 
         // Update monitor info in grid view
         gridView?.currentMonitorIndex = currentMonitorIndex
@@ -312,6 +324,104 @@ class OverlayWindowController: NSWindowController {
         let centerX = window.frame.origin.x + window.frame.width / 2
         let centerY = window.frame.origin.y + window.frame.height / 2
         return monitorIndexForPoint(CGPoint(x: centerX, y: centerY))
+    }
+
+    /// Calculate and set safe area insets for the grid view
+    /// These insets define the unusable area (menu bar, dock) so the grid
+    /// only covers the area where windows can actually be placed (visibleFrame)
+    private func updateGridViewSafeAreaInsets(for screen: NSScreen) {
+        guard let gridView = gridView else { return }
+
+        // The overlay covers screen.frame (full screen)
+        // But windows can only be placed in screen.visibleFrame (excludes menu bar, dock)
+        // We need insets to offset the grid drawing and mouse handling
+
+        // Top inset: menu bar (and notch on newer MacBooks)
+        let topInset = screen.frame.maxY - screen.visibleFrame.maxY
+
+        // Bottom inset: dock if positioned at bottom
+        let bottomInset = screen.visibleFrame.minY - screen.frame.minY
+
+        // Left inset: dock if positioned on left
+        let leftInset = screen.visibleFrame.minX - screen.frame.minX
+
+        // Right inset: dock if positioned on right
+        let rightInset = screen.frame.maxX - screen.visibleFrame.maxX
+
+        print("[SafeArea] Screen frame: \(screen.frame)")
+        print("[SafeArea] Screen visibleFrame: \(screen.visibleFrame)")
+        print("[SafeArea] Insets - top: \(topInset), bottom: \(bottomInset), left: \(leftInset), right: \(rightInset)")
+
+        gridView.topSafeAreaInset = max(0, topInset)
+        gridView.bottomSafeAreaInset = max(0, bottomInset)
+        gridView.leftSafeAreaInset = max(0, leftInset)
+        gridView.rightSafeAreaInset = max(0, rightInset)
+    }
+
+    // MARK: - Mouse-Based Monitor Switching
+
+    private func startMouseMonitoring() {
+        guard monitorCount > 1 else { return } // Only monitor if multiple screens
+
+        // Stop any existing monitoring first
+        stopMouseMonitoring()
+
+        // Reset tracking state
+        lastMousePosition = NSEvent.mouseLocation
+        mouseMovementOnOtherMonitor = 0
+
+        // Monitor global mouse movement (when mouse is over other monitors/apps)
+        globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]) { [weak self] event in
+            self?.handleMouseMovement()
+        }
+
+        // Monitor local mouse movement (when mouse is over our window)
+        localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]) { [weak self] event in
+            self?.handleMouseMovement()
+            return event
+        }
+    }
+
+    private func stopMouseMonitoring() {
+        if let monitor = globalMouseMonitor {
+            NSEvent.removeMonitor(monitor)
+            globalMouseMonitor = nil
+        }
+        if let monitor = localMouseMonitor {
+            NSEvent.removeMonitor(monitor)
+            localMouseMonitor = nil
+        }
+        lastMousePosition = nil
+        mouseMovementOnOtherMonitor = 0
+    }
+
+    private func handleMouseMovement() {
+        let currentPosition = NSEvent.mouseLocation
+        let mouseMonitorIndex = monitorIndexForPoint(currentPosition)
+
+        // Calculate movement distance from last position
+        if let lastPosition = lastMousePosition {
+            let dx = currentPosition.x - lastPosition.x
+            let dy = currentPosition.y - lastPosition.y
+            let distance = sqrt(dx * dx + dy * dy)
+
+            if mouseMonitorIndex != currentMonitorIndex {
+                // Mouse is on a different monitor - accumulate movement
+                mouseMovementOnOtherMonitor += distance
+
+                if mouseMovementOnOtherMonitor >= mouseMovementThreshold {
+                    // Threshold exceeded - switch to that monitor
+                    print("[Monitor] Mouse movement threshold exceeded on monitor \(mouseMonitorIndex + 1), switching...")
+                    moveToMonitor(index: mouseMonitorIndex)
+                    mouseMovementOnOtherMonitor = 0
+                }
+            } else {
+                // Mouse is on the same monitor as overlay - reset accumulated movement
+                mouseMovementOnOtherMonitor = 0
+            }
+        }
+
+        lastMousePosition = currentPosition
     }
 
     private func applySelection(_ selection: GridSelection) {
@@ -421,6 +531,11 @@ class GridOverlayView: NSView {
 
     private var isSelecting = false
     private var selectionAnchor: GridOffset?
+    private var didDrag = false
+    private var selectionBeforeMouseDown: GridSelection?
+
+    // Click behavior setting
+    var confirmOnClickWithoutDrag: Bool = true
 
     // Multi-monitor info (for display)
     var currentMonitorIndex: Int = 0 {
@@ -430,9 +545,29 @@ class GridOverlayView: NSView {
         didSet { needsDisplay = true }
     }
 
-    // Safe area inset from top (for menu bar)
+    // Safe area insets (for menu bar, dock, etc.)
+    // These define the area where windows can actually be placed
     var topSafeAreaInset: CGFloat = 0 {
         didSet { needsDisplay = true }
+    }
+    var bottomSafeAreaInset: CGFloat = 0 {
+        didSet { needsDisplay = true }
+    }
+    var leftSafeAreaInset: CGFloat = 0 {
+        didSet { needsDisplay = true }
+    }
+    var rightSafeAreaInset: CGFloat = 0 {
+        didSet { needsDisplay = true }
+    }
+
+    // The usable area for the grid (bounds minus safe area insets)
+    private var gridBounds: CGRect {
+        return CGRect(
+            x: leftSafeAreaInset,
+            y: bottomSafeAreaInset,
+            width: bounds.width - leftSafeAreaInset - rightSafeAreaInset,
+            height: bounds.height - topSafeAreaInset - bottomSafeAreaInset
+        )
     }
 
     // Display options
@@ -491,14 +626,17 @@ class GridOverlayView: NSView {
 
         guard let context = NSGraphicsContext.current?.cgContext else { return }
 
-        let cellWidth = bounds.width / CGFloat(gridSize.cols)
-        let cellHeight = bounds.height / CGFloat(gridSize.rows)
+        // Use gridBounds instead of bounds so the grid aligns with the visible frame
+        // where windows can actually be placed (excluding menu bar, dock)
+        let grid = gridBounds
+        let cellWidth = grid.width / CGFloat(gridSize.cols)
+        let cellHeight = grid.height / CGFloat(gridSize.rows)
 
         // Draw grid cells with alternating colors for visibility
         for row in 0..<gridSize.rows {
             for col in 0..<gridSize.cols {
-                let x = CGFloat(col) * cellWidth
-                let y = bounds.height - CGFloat(row + 1) * cellHeight
+                let x = grid.minX + CGFloat(col) * cellWidth
+                let y = grid.minY + grid.height - CGFloat(row + 1) * cellHeight
 
                 let isAlternate = (row + col) % 2 == 0
                 context.setFillColor(
@@ -516,16 +654,16 @@ class GridOverlayView: NSView {
 
         // Vertical lines
         for col in 0...gridSize.cols {
-            let x = CGFloat(col) * cellWidth
-            context.move(to: CGPoint(x: x, y: 0))
-            context.addLine(to: CGPoint(x: x, y: bounds.height))
+            let x = grid.minX + CGFloat(col) * cellWidth
+            context.move(to: CGPoint(x: x, y: grid.minY))
+            context.addLine(to: CGPoint(x: x, y: grid.maxY))
         }
 
         // Horizontal lines
         for row in 0...gridSize.rows {
-            let y = CGFloat(row) * cellHeight
-            context.move(to: CGPoint(x: 0, y: y))
-            context.addLine(to: CGPoint(x: bounds.width, y: y))
+            let y = grid.minY + CGFloat(row) * cellHeight
+            context.move(to: CGPoint(x: grid.minX, y: y))
+            context.addLine(to: CGPoint(x: grid.maxX, y: y))
         }
 
         context.strokePath()
@@ -533,8 +671,8 @@ class GridOverlayView: NSView {
         // Draw selection highlight
         if let selection = selection {
             let normalized = selection.normalized
-            let x = CGFloat(normalized.anchor.col) * cellWidth
-            let y = bounds.height - CGFloat(normalized.target.row + 1) * cellHeight
+            let x = grid.minX + CGFloat(normalized.anchor.col) * cellWidth
+            let y = grid.minY + grid.height - CGFloat(normalized.target.row + 1) * cellHeight
             let width = CGFloat(selection.width) * cellWidth
             let height = CGFloat(selection.height) * cellHeight
 
@@ -548,14 +686,14 @@ class GridOverlayView: NSView {
             context.stroke(CGRect(x: x, y: y, width: width, height: height))
 
             // Draw anchor marker (first corner - filled circle)
-            let anchorX = CGFloat(selection.anchor.col) * cellWidth + cellWidth / 2 - 6
-            let anchorY = bounds.height - CGFloat(selection.anchor.row + 1) * cellHeight + cellHeight / 2 - 6
+            let anchorX = grid.minX + CGFloat(selection.anchor.col) * cellWidth + cellWidth / 2 - 6
+            let anchorY = grid.minY + grid.height - CGFloat(selection.anchor.row + 1) * cellHeight + cellHeight / 2 - 6
             context.setFillColor(nsColor(appearanceSettings.anchorMarkerColor).cgColor)
             context.fillEllipse(in: CGRect(x: anchorX, y: anchorY, width: 12, height: 12))
 
             // Draw target marker (second corner - hollow circle)
-            let targetX = CGFloat(selection.target.col) * cellWidth + cellWidth / 2 - 6
-            let targetY = bounds.height - CGFloat(selection.target.row + 1) * cellHeight + cellHeight / 2 - 6
+            let targetX = grid.minX + CGFloat(selection.target.col) * cellWidth + cellWidth / 2 - 6
+            let targetY = grid.minY + grid.height - CGFloat(selection.target.row + 1) * cellHeight + cellHeight / 2 - 6
             context.setStrokeColor(nsColor(appearanceSettings.targetMarkerColor).cgColor)
             context.setLineWidth(2.0)
             context.strokeEllipse(in: CGRect(x: targetX, y: targetY, width: 12, height: 12))
@@ -791,66 +929,143 @@ class GridOverlayView: NSView {
         window?.makeFirstResponder(self)
 
         let point = convert(event.locationInWindow, from: nil)
-        let cellWidth = bounds.width / CGFloat(gridSize.cols)
-        let cellHeight = bounds.height / CGFloat(gridSize.rows)
 
-        let col = Int(point.x / cellWidth)
-        let row = gridSize.rows - 1 - Int(point.y / cellHeight)
+        // Use gridBounds to translate mouse coordinates to grid cells
+        let grid = gridBounds
+        let cellWidth = grid.width / CGFloat(gridSize.cols)
+        let cellHeight = grid.height / CGFloat(gridSize.rows)
+
+        // Translate point relative to gridBounds
+        let gridRelativeX = point.x - grid.minX
+        let gridRelativeY = point.y - grid.minY
+
+        let col = Int(gridRelativeX / cellWidth)
+        let row = gridSize.rows - 1 - Int(gridRelativeY / cellHeight)
 
         let clampedCol = max(0, min(col, gridSize.cols - 1))
         let clampedRow = max(0, min(row, gridSize.rows - 1))
 
+        // Store current selection in case we need to restore it (for click-to-confirm)
+        selectionBeforeMouseDown = selection
+
+        // Store the clicked cell as potential anchor for drag
         selectionAnchor = GridOffset(col: clampedCol, row: clampedRow)
-        selection = GridSelection(anchor: selectionAnchor!, target: selectionAnchor!)
+        didDrag = false
         isSelecting = true
+
+        // Don't change selection yet - wait to see if this is a click or drag
     }
 
     override func mouseDragged(with event: NSEvent) {
         guard isSelecting, let anchor = selectionAnchor else { return }
 
         let point = convert(event.locationInWindow, from: nil)
-        let cellWidth = bounds.width / CGFloat(gridSize.cols)
-        let cellHeight = bounds.height / CGFloat(gridSize.rows)
 
-        let col = Int(point.x / cellWidth)
-        let row = gridSize.rows - 1 - Int(point.y / cellHeight)
+        // Use gridBounds to translate mouse coordinates to grid cells
+        let grid = gridBounds
+        let cellWidth = grid.width / CGFloat(gridSize.cols)
+        let cellHeight = grid.height / CGFloat(gridSize.rows)
+
+        // Translate point relative to gridBounds
+        let gridRelativeX = point.x - grid.minX
+        let gridRelativeY = point.y - grid.minY
+
+        let col = Int(gridRelativeX / cellWidth)
+        let row = gridSize.rows - 1 - Int(gridRelativeY / cellHeight)
 
         let clampedCol = max(0, min(col, gridSize.cols - 1))
         let clampedRow = max(0, min(row, gridSize.rows - 1))
 
+        // Mark that dragging occurred
+        didDrag = true
+
+        // Update selection to show drag range
         selection = GridSelection(anchor: anchor, target: GridOffset(col: clampedCol, row: clampedRow))
     }
 
     override func mouseUp(with event: NSEvent) {
-        guard isSelecting, let anchor = selectionAnchor else {
+        guard isSelecting else {
             isSelecting = false
             selectionAnchor = nil
+            didDrag = false
+            selectionBeforeMouseDown = nil
             return
         }
 
-        // Calculate final target position from mouse release location
-        let point = convert(event.locationInWindow, from: nil)
-        let cellWidth = bounds.width / CGFloat(gridSize.cols)
-        let cellHeight = bounds.height / CGFloat(gridSize.rows)
+        let finalSelection: GridSelection
 
-        let col = Int(point.x / cellWidth)
-        let row = gridSize.rows - 1 - Int(point.y / cellHeight)
+        if didDrag {
+            // User dragged - use the drag selection
+            guard let anchor = selectionAnchor else {
+                isSelecting = false
+                selectionAnchor = nil
+                didDrag = false
+                selectionBeforeMouseDown = nil
+                return
+            }
 
-        let clampedCol = max(0, min(col, gridSize.cols - 1))
-        let clampedRow = max(0, min(row, gridSize.rows - 1))
+            // Calculate final target position from mouse release location
+            let point = convert(event.locationInWindow, from: nil)
 
-        // Finalize the selection with anchor from mouseDown and target from mouseUp
-        let finalSelection = GridSelection(
-            anchor: anchor,
-            target: GridOffset(col: clampedCol, row: clampedRow)
-        )
-        selection = finalSelection
+            // Use gridBounds to translate mouse coordinates to grid cells
+            let grid = gridBounds
+            let cellWidth = grid.width / CGFloat(gridSize.cols)
+            let cellHeight = grid.height / CGFloat(gridSize.rows)
+
+            // Translate point relative to gridBounds
+            let gridRelativeX = point.x - grid.minX
+            let gridRelativeY = point.y - grid.minY
+
+            let col = Int(gridRelativeX / cellWidth)
+            let row = gridSize.rows - 1 - Int(gridRelativeY / cellHeight)
+
+            let clampedCol = max(0, min(col, gridSize.cols - 1))
+            let clampedRow = max(0, min(row, gridSize.rows - 1))
+
+            finalSelection = GridSelection(
+                anchor: anchor,
+                target: GridOffset(col: clampedCol, row: clampedRow)
+            )
+            selection = finalSelection
+        } else {
+            // User clicked without dragging
+            let clickedCell = selectionAnchor!
+
+            // Check if click is inside the existing selection (blue area)
+            let clickInsideSelection: Bool
+            if let existingSelection = selectionBeforeMouseDown {
+                let normalized = existingSelection.normalized
+                let minCol = normalized.anchor.col
+                let maxCol = normalized.target.col
+                let minRow = normalized.anchor.row
+                let maxRow = normalized.target.row
+                clickInsideSelection = clickedCell.col >= minCol && clickedCell.col <= maxCol &&
+                                       clickedCell.row >= minRow && clickedCell.row <= maxRow
+            } else {
+                clickInsideSelection = false
+            }
+
+            if clickInsideSelection && confirmOnClickWithoutDrag {
+                // Click inside selection with confirm-on-click enabled: confirm existing selection
+                finalSelection = selectionBeforeMouseDown!
+                selection = finalSelection
+            } else {
+                // Click outside selection OR confirm-on-click disabled: select single cell
+                finalSelection = GridSelection(
+                    anchor: clickedCell,
+                    target: clickedCell
+                )
+                selection = finalSelection
+            }
+        }
 
         // Clean up state before confirming (in case callback triggers UI changes)
         isSelecting = false
         selectionAnchor = nil
+        didDrag = false
+        selectionBeforeMouseDown = nil
 
-        // Confirm immediately on mouse release - this triggers the resize
+        // Confirm the selection - this triggers the resize
         onSelectionConfirmed?(finalSelection)
     }
 }
