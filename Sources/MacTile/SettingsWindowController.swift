@@ -17,11 +17,20 @@ class SettingsWindowController: NSWindowController {
     private var autoCloseCheckbox: NSButton!
     private var showIconCheckbox: NSButton!
 
-    // Shortcuts tab
+    // Shortcuts tab - Primary
     private var shortcutField: NSTextField!
     private var shortcutRecordButton: NSButton!
     private var isRecordingShortcut = false
     private var recordedShortcut: KeyboardShortcut?
+
+    // Shortcuts tab - Secondary
+    private var secondaryShortcutField: NSTextField!
+    private var secondaryShortcutRecordButton: NSButton!
+    private var secondaryShortcutClearButton: NSButton!
+    private var isRecordingSecondaryShortcut = false
+    private var recordedSecondaryShortcut: KeyboardShortcut?
+    private var hasSecondaryShortcut = true
+
     private var panModifierPopup: NSPopUpButton!
     private var anchorModifierPopup: NSPopUpButton!
     private var targetModifierPopup: NSPopUpButton!
@@ -210,8 +219,8 @@ class SettingsWindowController: NSWindowController {
         let popupX: CGFloat = 240
         let popupWidth: CGFloat = 120
 
-        // Global Hotkey Section
-        let hotkeyLabel = createLabel("Toggle Overlay Shortcut:", frame: NSRect(x: 20, y: y, width: 220, height: 20))
+        // Primary Hotkey Section
+        let hotkeyLabel = createLabel("Primary Shortcut:", frame: NSRect(x: 20, y: y, width: 220, height: 20))
         hotkeyLabel.font = NSFont.boldSystemFont(ofSize: 13)
         view.addSubview(hotkeyLabel)
         y -= 28
@@ -229,6 +238,34 @@ class SettingsWindowController: NSWindowController {
         shortcutRecordButton.target = self
         shortcutRecordButton.action = #selector(toggleRecordShortcut)
         view.addSubview(shortcutRecordButton)
+        y -= 30
+
+        // Secondary Hotkey Section
+        let secondaryLabel = createLabel("Secondary Shortcut (optional):", frame: NSRect(x: 20, y: y, width: 220, height: 20))
+        secondaryLabel.font = NSFont.boldSystemFont(ofSize: 13)
+        view.addSubview(secondaryLabel)
+        y -= 28
+
+        secondaryShortcutField = NSTextField(frame: NSRect(x: 20, y: y, width: 150, height: 24))
+        secondaryShortcutField.isEditable = false
+        secondaryShortcutField.isSelectable = false
+        secondaryShortcutField.alignment = .center
+        secondaryShortcutField.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .medium)
+        view.addSubview(secondaryShortcutField)
+
+        secondaryShortcutRecordButton = NSButton(frame: NSRect(x: 180, y: y, width: 100, height: 24))
+        secondaryShortcutRecordButton.title = "Record"
+        secondaryShortcutRecordButton.bezelStyle = .rounded
+        secondaryShortcutRecordButton.target = self
+        secondaryShortcutRecordButton.action = #selector(toggleRecordSecondaryShortcut)
+        view.addSubview(secondaryShortcutRecordButton)
+
+        secondaryShortcutClearButton = NSButton(frame: NSRect(x: 290, y: y, width: 60, height: 24))
+        secondaryShortcutClearButton.title = "Clear"
+        secondaryShortcutClearButton.bezelStyle = .rounded
+        secondaryShortcutClearButton.target = self
+        secondaryShortcutClearButton.action = #selector(clearSecondaryShortcut)
+        view.addSubview(secondaryShortcutClearButton)
         y -= 18
 
         let shortcutHint = createLabel("Click Record and press your desired key combination", frame: NSRect(x: 20, y: y, width: 400, height: 16))
@@ -487,9 +524,23 @@ class SettingsWindowController: NSWindowController {
         autoCloseCheckbox.state = settings.autoClose ? .on : .off
         showIconCheckbox.state = settings.showMenuBarIcon ? .on : .off
 
-        // Global shortcut
+        // Primary shortcut
         shortcutField.stringValue = settings.toggleOverlayShortcut.displayString
         recordedShortcut = settings.toggleOverlayShortcut
+
+        // Secondary shortcut
+        if let secondary = settings.secondaryToggleOverlayShortcut {
+            secondaryShortcutField.stringValue = secondary.displayString
+            recordedSecondaryShortcut = secondary
+            hasSecondaryShortcut = true
+            secondaryShortcutClearButton.isEnabled = true
+        } else {
+            secondaryShortcutField.stringValue = "Not set"
+            secondaryShortcutField.textColor = .secondaryLabelColor
+            recordedSecondaryShortcut = nil
+            hasSecondaryShortcut = false
+            secondaryShortcutClearButton.isEnabled = false
+        }
 
         // Overlay keyboard settings
         let keyboard = settings.overlayKeyboard
@@ -666,6 +717,80 @@ class SettingsWindowController: NSWindowController {
         }
     }
 
+    @objc private func toggleRecordSecondaryShortcut() {
+        isRecordingSecondaryShortcut.toggle()
+
+        if isRecordingSecondaryShortcut {
+            secondaryShortcutRecordButton.title = "Press Keys..."
+            secondaryShortcutField.stringValue = "..."
+            secondaryShortcutField.textColor = .labelColor
+            window?.makeFirstResponder(window?.contentView)
+
+            // Set up local event monitor
+            NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self = self, self.isRecordingSecondaryShortcut else { return event }
+
+                // Get modifiers
+                var modifiers: UInt = 0
+                if event.modifierFlags.contains(.control) {
+                    modifiers |= KeyboardShortcut.Modifiers.control
+                }
+                if event.modifierFlags.contains(.option) {
+                    modifiers |= KeyboardShortcut.Modifiers.option
+                }
+                if event.modifierFlags.contains(.shift) {
+                    modifiers |= KeyboardShortcut.Modifiers.shift
+                }
+                if event.modifierFlags.contains(.command) {
+                    modifiers |= KeyboardShortcut.Modifiers.command
+                }
+
+                // Need at least one modifier for global hotkey
+                if modifiers == 0 && event.keyCode != 53 { // Allow Escape without modifier
+                    return nil
+                }
+
+                // Handle Escape to cancel
+                if event.keyCode == 53 && modifiers == 0 {
+                    self.isRecordingSecondaryShortcut = false
+                    self.secondaryShortcutRecordButton.title = "Record"
+                    self.loadCurrentSettings()
+                    return nil
+                }
+
+                let keyString = self.keyCodeToString(event.keyCode)
+                self.recordedSecondaryShortcut = KeyboardShortcut(
+                    keyCode: event.keyCode,
+                    modifiers: modifiers,
+                    keyString: keyString
+                )
+
+                self.secondaryShortcutField.stringValue = self.recordedSecondaryShortcut?.displayString ?? ""
+                self.secondaryShortcutField.textColor = .labelColor
+                self.hasSecondaryShortcut = true
+                self.secondaryShortcutClearButton.isEnabled = true
+                self.isRecordingSecondaryShortcut = false
+                self.secondaryShortcutRecordButton.title = "Record"
+
+                return nil
+            }
+        } else {
+            secondaryShortcutRecordButton.title = "Record"
+            if !hasSecondaryShortcut {
+                secondaryShortcutField.stringValue = "Not set"
+                secondaryShortcutField.textColor = .secondaryLabelColor
+            }
+        }
+    }
+
+    @objc private func clearSecondaryShortcut() {
+        recordedSecondaryShortcut = nil
+        hasSecondaryShortcut = false
+        secondaryShortcutField.stringValue = "Not set"
+        secondaryShortcutField.textColor = .secondaryLabelColor
+        secondaryShortcutClearButton.isEnabled = false
+    }
+
     private func keyCodeToString(_ keyCode: UInt16) -> String {
         let keyMap: [UInt16: String] = [
             0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X",
@@ -704,10 +829,15 @@ class SettingsWindowController: NSWindowController {
         SettingsManager.shared.updateAutoClose(autoCloseCheckbox.state == .on)
         SettingsManager.shared.updateShowMenuBarIcon(showIconCheckbox.state == .on)
 
-        // Update global shortcut
+        // Update primary shortcut
         if let shortcut = recordedShortcut {
             SettingsManager.shared.updateToggleOverlayShortcut(shortcut)
         }
+
+        // Update secondary shortcut (can be nil to clear it)
+        SettingsManager.shared.updateSecondaryToggleOverlayShortcut(
+            hasSecondaryShortcut ? recordedSecondaryShortcut : nil
+        )
 
         // Update overlay keyboard settings
         let keyboardSettings = OverlayKeyboardSettings(

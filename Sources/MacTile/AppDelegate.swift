@@ -6,6 +6,7 @@ import HotKey
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var hotKey: HotKey?
+    private var secondaryHotKey: HotKey?
     private var overlayController: OverlayWindowController?
     private var settingsController: SettingsWindowController?
     private var settingsObserver: NSObjectProtocol?
@@ -28,8 +29,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Observe settings changes
         observeSettings()
 
-        let shortcut = SettingsManager.shared.settings.toggleOverlayShortcut.displayString
-        print("MacTile ready. Press \(shortcut) to show grid.")
+        let settings = SettingsManager.shared.settings
+        let shortcut = settings.toggleOverlayShortcut.displayString
+        if let secondary = settings.secondaryToggleOverlayShortcut {
+            print("MacTile ready. Press \(shortcut) or \(secondary.displayString) to show grid.")
+        } else {
+            print("MacTile ready. Press \(shortcut) to show grid.")
+        }
     }
 
     private func observeSettings() {
@@ -118,8 +124,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = SettingsManager.shared.settings
         let menu = NSMenu()
 
-        // Show Grid item with current shortcut
-        let shortcutDisplay = settings.toggleOverlayShortcut.displayString
+        // Show Grid item with current shortcut(s)
+        var shortcutDisplay = settings.toggleOverlayShortcut.displayString
+        if let secondary = settings.secondaryToggleOverlayShortcut {
+            shortcutDisplay += " / \(secondary.displayString)"
+        }
         menu.addItem(NSMenuItem(title: "Show Grid (\(shortcutDisplay))", action: #selector(showGrid), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
 
@@ -151,8 +160,36 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupHotKey() {
         let settings = SettingsManager.shared.settings
-        let shortcut = settings.toggleOverlayShortcut
 
+        // Setup primary hotkey
+        let shortcut = settings.toggleOverlayShortcut
+        hotKey = createHotKey(from: shortcut)
+        if hotKey != nil {
+            print("Registered primary hotkey: \(shortcut.displayString)")
+        } else {
+            print("Failed to register primary hotkey - unknown key code: \(shortcut.keyCode)")
+            // Fall back to default
+            hotKey = HotKey(key: .g, modifiers: [.control, .option])
+            hotKey?.keyDownHandler = { [weak self] in
+                self?.toggleGrid()
+            }
+        }
+
+        // Setup secondary hotkey (optional)
+        if let secondaryShortcut = settings.secondaryToggleOverlayShortcut {
+            secondaryHotKey = createHotKey(from: secondaryShortcut)
+            if secondaryHotKey != nil {
+                print("Registered secondary hotkey: \(secondaryShortcut.displayString)")
+            } else {
+                print("Failed to register secondary hotkey - unknown key code: \(secondaryShortcut.keyCode)")
+            }
+        } else {
+            secondaryHotKey = nil
+            print("No secondary hotkey configured")
+        }
+    }
+
+    private func createHotKey(from shortcut: KeyboardShortcut) -> HotKey? {
         // Convert our modifier flags to HotKey modifiers
         var modifiers: NSEvent.ModifierFlags = []
         if shortcut.modifiers & KeyboardShortcut.Modifiers.control != 0 {
@@ -170,19 +207,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Map keyCode to HotKey.Key
         if let key = keyCodeToHotKey(shortcut.keyCode) {
-            hotKey = HotKey(key: key, modifiers: modifiers)
-            hotKey?.keyDownHandler = { [weak self] in
+            let hk = HotKey(key: key, modifiers: modifiers)
+            hk.keyDownHandler = { [weak self] in
                 self?.toggleGrid()
             }
-            print("Registered hotkey: \(shortcut.displayString)")
-        } else {
-            print("Failed to register hotkey - unknown key code: \(shortcut.keyCode)")
-            // Fall back to default
-            hotKey = HotKey(key: .g, modifiers: [.control, .option])
-            hotKey?.keyDownHandler = { [weak self] in
-                self?.toggleGrid()
-            }
+            return hk
         }
+        return nil
     }
 
     private func keyCodeToHotKey(_ keyCode: UInt16) -> Key? {

@@ -41,6 +41,13 @@ public struct KeyboardShortcut: Equatable, Codable {
         modifiers: Modifiers.control | Modifiers.option,
         keyString: "G"
     )
+
+    // Secondary default: Command + Enter
+    public static let defaultSecondaryToggleOverlay = KeyboardShortcut(
+        keyCode: 36, // Return key
+        modifiers: Modifiers.command,
+        keyString: "Return"
+    )
 }
 
 // MARK: - Color Settings
@@ -225,8 +232,11 @@ public struct MacTileSettings: Codable, Equatable {
 
     // MARK: - Keyboard Shortcuts
 
-    /// Global shortcut to toggle overlay
+    /// Global shortcut to toggle overlay (primary)
     public var toggleOverlayShortcut: KeyboardShortcut
+
+    /// Secondary global shortcut to toggle overlay (optional)
+    public var secondaryToggleOverlayShortcut: KeyboardShortcut?
 
     /// Overlay keyboard configuration
     public var overlayKeyboard: OverlayKeyboardSettings
@@ -253,6 +263,7 @@ public struct MacTileSettings: Codable, Equatable {
         autoClose: true,
         showMenuBarIcon: true,
         toggleOverlayShortcut: .defaultToggleOverlay,
+        secondaryToggleOverlayShortcut: .defaultSecondaryToggleOverlay,
         overlayKeyboard: .default,
         appearance: .default
     )
@@ -264,6 +275,7 @@ public struct MacTileSettings: Codable, Equatable {
         autoClose: Bool,
         showMenuBarIcon: Bool,
         toggleOverlayShortcut: KeyboardShortcut,
+        secondaryToggleOverlayShortcut: KeyboardShortcut?,
         overlayKeyboard: OverlayKeyboardSettings,
         appearance: AppearanceSettings
     ) {
@@ -273,6 +285,7 @@ public struct MacTileSettings: Codable, Equatable {
         self.autoClose = autoClose
         self.showMenuBarIcon = showMenuBarIcon
         self.toggleOverlayShortcut = toggleOverlayShortcut
+        self.secondaryToggleOverlayShortcut = secondaryToggleOverlayShortcut
         self.overlayKeyboard = overlayKeyboard
         self.appearance = appearance
     }

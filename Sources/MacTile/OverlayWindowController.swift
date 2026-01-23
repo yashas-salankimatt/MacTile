@@ -647,13 +647,35 @@ class GridOverlayView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        if isSelecting, let selection = selection {
-            // Double-click confirms selection
-            if event.clickCount >= 2 {
-                onSelectionConfirmed?(selection)
-            }
+        guard isSelecting, let anchor = selectionAnchor else {
+            isSelecting = false
+            selectionAnchor = nil
+            return
         }
+
+        // Calculate final target position from mouse release location
+        let point = convert(event.locationInWindow, from: nil)
+        let cellWidth = bounds.width / CGFloat(gridSize.cols)
+        let cellHeight = bounds.height / CGFloat(gridSize.rows)
+
+        let col = Int(point.x / cellWidth)
+        let row = gridSize.rows - 1 - Int(point.y / cellHeight)
+
+        let clampedCol = max(0, min(col, gridSize.cols - 1))
+        let clampedRow = max(0, min(row, gridSize.rows - 1))
+
+        // Finalize the selection with anchor from mouseDown and target from mouseUp
+        let finalSelection = GridSelection(
+            anchor: anchor,
+            target: GridOffset(col: clampedCol, row: clampedRow)
+        )
+        selection = finalSelection
+
+        // Clean up state before confirming (in case callback triggers UI changes)
         isSelecting = false
         selectionAnchor = nil
+
+        // Confirm immediately on mouse release - this triggers the resize
+        onSelectionConfirmed?(finalSelection)
     }
 }

@@ -62,6 +62,7 @@ class SettingsManager {
             autoClose: settings.autoClose,
             showMenuBarIcon: settings.showMenuBarIcon,
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
             appearance: settings.appearance
         )
@@ -76,6 +77,7 @@ class SettingsManager {
             autoClose: settings.autoClose,
             showMenuBarIcon: settings.showMenuBarIcon,
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
             appearance: settings.appearance
         )
@@ -89,6 +91,7 @@ class SettingsManager {
             autoClose: settings.autoClose,
             showMenuBarIcon: settings.showMenuBarIcon,
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
             appearance: settings.appearance
         )
@@ -102,6 +105,7 @@ class SettingsManager {
             autoClose: autoClose,
             showMenuBarIcon: settings.showMenuBarIcon,
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
             appearance: settings.appearance
         )
@@ -115,6 +119,7 @@ class SettingsManager {
             autoClose: settings.autoClose,
             showMenuBarIcon: show,
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
             appearance: settings.appearance
         )
@@ -128,6 +133,21 @@ class SettingsManager {
             autoClose: settings.autoClose,
             showMenuBarIcon: settings.showMenuBarIcon,
             toggleOverlayShortcut: shortcut,
+            secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
+            overlayKeyboard: settings.overlayKeyboard,
+            appearance: settings.appearance
+        )
+    }
+
+    func updateSecondaryToggleOverlayShortcut(_ shortcut: KeyboardShortcut?) {
+        settings = MacTileSettings(
+            gridSizes: settings.gridSizes,
+            windowSpacing: settings.windowSpacing,
+            insets: settings.insets,
+            autoClose: settings.autoClose,
+            showMenuBarIcon: settings.showMenuBarIcon,
+            toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            secondaryToggleOverlayShortcut: shortcut,
             overlayKeyboard: settings.overlayKeyboard,
             appearance: settings.appearance
         )
@@ -141,6 +161,7 @@ class SettingsManager {
             autoClose: settings.autoClose,
             showMenuBarIcon: settings.showMenuBarIcon,
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: keyboard,
             appearance: settings.appearance
         )
@@ -154,6 +175,7 @@ class SettingsManager {
             autoClose: settings.autoClose,
             showMenuBarIcon: settings.showMenuBarIcon,
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
             appearance: appearance
         )
