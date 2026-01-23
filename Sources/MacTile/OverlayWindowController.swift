@@ -239,6 +239,13 @@ class OverlayWindowController: NSWindowController {
                 return
             }
 
+            print("[ApplySelection] ═══════════════════════════════════════════════")
+            print("[ApplySelection] Grid size: \(gridSize.cols)x\(gridSize.rows)")
+            print("[ApplySelection] Selection: anchor=(\(selection.anchor.col),\(selection.anchor.row)) target=(\(selection.target.col),\(selection.target.row))")
+            print("[ApplySelection] Normalized: \(selection.normalized)")
+            print("[ApplySelection] Screen visible frame: \(screen.visibleFrame)")
+            print("[ApplySelection] Spacing: \(windowTiler.spacing), Insets: \(windowTiler.insets)")
+
             let targetFrame = GridOperations.selectionToRect(
                 selection: selection,
                 gridSize: gridSize,
@@ -247,12 +254,16 @@ class OverlayWindowController: NSWindowController {
                 insets: windowTiler.insets
             )
 
+            print("[ApplySelection] Calculated target frame: \(targetFrame)")
+            print("[ApplySelection] Target window: \(targetWindow.title) (current frame: \(targetWindow.frame))")
+
             let success = RealWindowManager.shared.setWindowFrame(targetWindow, frame: targetFrame)
             if success {
-                print("Successfully tiled window: \(targetWindow.title)")
+                print("[ApplySelection] ✓ Successfully tiled window: \(targetWindow.title)")
             } else {
-                print("Failed to tile window: \(targetWindow.title)")
+                print("[ApplySelection] ✗ Failed to tile window: \(targetWindow.title)")
             }
+            print("[ApplySelection] ═══════════════════════════════════════════════")
 
             // Return focus to the tiled window
             RealWindowManager.shared.activateWindow(targetWindow)
