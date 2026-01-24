@@ -395,6 +395,62 @@ public struct TilingPreset: Codable, Equatable {
     }
 }
 
+// MARK: - Focus Preset
+
+/// A keyboard shortcut to focus windows of a specific application
+public struct FocusPreset: Codable, Equatable {
+    /// The key code for this preset
+    public var keyCode: UInt16
+    /// Human-readable key name (e.g., "T", "B")
+    public var keyString: String
+    /// Modifier flags (control, option, shift, command)
+    public var modifiers: UInt
+
+    /// The bundle identifier of the target application (e.g., "com.googlecode.iterm2")
+    public var appBundleID: String
+    /// Display name of the application (e.g., "iTerm2")
+    public var appName: String
+
+    /// If true, this hotkey works globally (even without overlay)
+    public var worksWithoutOverlay: Bool
+    /// If true, this hotkey works when the overlay is active
+    public var worksWithOverlay: Bool
+
+    public init(
+        keyCode: UInt16,
+        keyString: String,
+        modifiers: UInt = KeyboardShortcut.Modifiers.none,
+        appBundleID: String,
+        appName: String,
+        worksWithoutOverlay: Bool = true,
+        worksWithOverlay: Bool = true
+    ) {
+        self.keyCode = keyCode
+        self.keyString = keyString
+        self.modifiers = modifiers
+        self.appBundleID = appBundleID
+        self.appName = appName
+        self.worksWithoutOverlay = worksWithoutOverlay
+        self.worksWithOverlay = worksWithOverlay
+    }
+
+    /// Display string for the key combination (e.g., "⌃⌥T")
+    public var shortcutDisplayString: String {
+        var parts: [String] = []
+        if modifiers & KeyboardShortcut.Modifiers.control != 0 { parts.append("⌃") }
+        if modifiers & KeyboardShortcut.Modifiers.option != 0 { parts.append("⌥") }
+        if modifiers & KeyboardShortcut.Modifiers.shift != 0 { parts.append("⇧") }
+        if modifiers & KeyboardShortcut.Modifiers.command != 0 { parts.append("⌘") }
+        parts.append(keyString)
+        return parts.joined()
+    }
+
+    /// Check if this preset matches the given key event
+    public func matches(keyCode: UInt16, modifiers: UInt) -> Bool {
+        return self.keyCode == keyCode && self.modifiers == modifiers
+    }
+}
+
 // MARK: - MacTile Settings
 
 /// All configurable settings for MacTile
@@ -454,6 +510,9 @@ public struct MacTileSettings: Codable, Equatable {
     /// Quick tiling presets (0-30 presets)
     public var tilingPresets: [TilingPreset]
 
+    /// Focus presets for switching between application windows
+    public var focusPresets: [FocusPreset]
+
     // MARK: - Appearance
 
     /// Visual appearance settings
@@ -483,6 +542,7 @@ public struct MacTileSettings: Codable, Equatable {
         secondaryToggleOverlayShortcut: .defaultSecondaryToggleOverlay,
         overlayKeyboard: .default,
         tilingPresets: [],
+        focusPresets: [],
         appearance: .default
     )
 
@@ -500,6 +560,7 @@ public struct MacTileSettings: Codable, Equatable {
         secondaryToggleOverlayShortcut: KeyboardShortcut?,
         overlayKeyboard: OverlayKeyboardSettings,
         tilingPresets: [TilingPreset],
+        focusPresets: [FocusPreset],
         appearance: AppearanceSettings
     ) {
         self.gridSizes = gridSizes.isEmpty ? Self.defaultGridSizes : gridSizes
@@ -514,8 +575,9 @@ public struct MacTileSettings: Codable, Equatable {
         self.toggleOverlayShortcut = toggleOverlayShortcut
         self.secondaryToggleOverlayShortcut = secondaryToggleOverlayShortcut
         self.overlayKeyboard = overlayKeyboard
-        // Limit to 30 presets
+        // Limit to 30 presets each
         self.tilingPresets = Array(tilingPresets.prefix(30))
+        self.focusPresets = Array(focusPresets.prefix(30))
         self.appearance = appearance
     }
 }

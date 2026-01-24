@@ -152,8 +152,12 @@ class OverlayWindowController: NSWindowController {
         gridView.showMonitorIndicator = settings.showMonitorIndicator
         gridView.confirmOnClickWithoutDrag = settings.confirmOnClickWithoutDrag
         gridView.tilingPresets = settings.tilingPresets
+        gridView.focusPresets = settings.focusPresets
         gridView.onSelectionConfirmed = { [weak self] selection in
             self?.applySelection(selection)
+        }
+        gridView.onFocusPresetActivated = { [weak self] bundleID in
+            self?.activateFocusPreset(bundleID: bundleID)
         }
         gridView.onCancel = { [weak self] in
             self?.hideOverlay(cancelled: true)
@@ -511,6 +515,27 @@ class OverlayWindowController: NSWindowController {
             )
         }
     }
+
+    /// Activate a focus preset - hide overlay and focus the target app
+    func activateFocusPreset(bundleID: String) {
+        // Check if the window that was focused BEFORE the overlay belongs to the target app
+        // If so, we should force cycling since user was already viewing that app
+        var shouldForceCycle = false
+        if let targetWindow = targetWindow {
+            // Get bundle ID from the process identifier
+            if let targetApp = NSRunningApplication(processIdentifier: targetWindow.processIdentifier),
+               targetApp.bundleIdentifier == bundleID {
+                shouldForceCycle = true
+                print("[FocusPreset] Pre-overlay window was from target app, will force cycle")
+            }
+        }
+
+        // Hide the overlay first (don't return focus to original window)
+        hideOverlay(cancelled: false)
+
+        // Focus the target app (with force cycle if we were already on that app)
+        FocusManager.shared.focusNextWindow(forBundleID: bundleID, forceCycle: shouldForceCycle)
+    }
 }
 
 /// View that displays the grid and handles keyboard input
@@ -533,6 +558,7 @@ class GridOverlayView: NSView {
     var onGridSizeChanged: ((GridSize) -> Void)?
     var onNextMonitor: (() -> Void)?
     var onPreviousMonitor: (() -> Void)?
+    var onFocusPresetActivated: ((String) -> Void)?  // Called with bundle ID when focus preset is used
 
     private var isSelecting = false
     private var selectionAnchor: GridOffset?
@@ -586,6 +612,7 @@ class GridOverlayView: NSView {
     var gridPresets: [GridSize]
     var keyboardSettings: OverlayKeyboardSettings
     var tilingPresets: [TilingPreset] = []
+    var focusPresets: [FocusPreset] = []
 
     // Target window identifier (set by OverlayWindowController)
     var targetWindowID: UInt32?
@@ -838,6 +865,15 @@ class GridOverlayView: NSView {
                     print("Auto-confirming preset")
                     onSelectionConfirmed?(presetSelection)
                 }
+                return
+            }
+        }
+
+        // Check for focus presets (that work with overlay)
+        for preset in focusPresets {
+            if preset.worksWithOverlay && preset.matches(keyCode: event.keyCode, modifiers: eventModifiers) {
+                print("Focus preset matched: \(preset.shortcutDisplayString) -> \(preset.appName)")
+                onFocusPresetActivated?(preset.appBundleID)
                 return
             }
         }

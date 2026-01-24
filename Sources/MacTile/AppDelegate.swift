@@ -7,6 +7,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var hotKey: HotKey?
     private var secondaryHotKey: HotKey?
+    private var focusHotKeys: [HotKey] = []  // Global hotkeys for focus presets
     private var overlayController: OverlayWindowController?
     private var settingsController: SettingsWindowController?
     private var settingsObserver: NSObjectProtocol?
@@ -25,6 +26,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Register global hotkey from settings
         setupHotKey()
+
+        // Register focus preset hotkeys
+        setupFocusHotKeys()
 
         // Sync launch at login with system state
         syncLaunchAtLogin()
@@ -54,6 +58,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleSettingsChanged() {
         // Re-register hotkey if it changed
         setupHotKey()
+
+        // Re-register focus preset hotkeys
+        setupFocusHotKeys()
 
         // Update status item visibility
         let settings = SettingsManager.shared.settings
@@ -212,6 +219,65 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             secondaryHotKey = nil
             print("No secondary hotkey configured")
         }
+    }
+
+    private func setupFocusHotKeys() {
+        let settings = SettingsManager.shared.settings
+
+        // Clear existing focus hotkeys
+        focusHotKeys.removeAll()
+
+        // Set up hotkeys for focus presets that work without overlay
+        for preset in settings.focusPresets {
+            guard preset.worksWithoutOverlay,
+                  preset.keyCode > 0,
+                  !preset.keyString.isEmpty,
+                  !preset.appBundleID.isEmpty else {
+                continue
+            }
+
+            // Convert modifier flags to HotKey modifiers
+            var modifiers: NSEvent.ModifierFlags = []
+            if preset.modifiers & KeyboardShortcut.Modifiers.control != 0 {
+                modifiers.insert(.control)
+            }
+            if preset.modifiers & KeyboardShortcut.Modifiers.option != 0 {
+                modifiers.insert(.option)
+            }
+            if preset.modifiers & KeyboardShortcut.Modifiers.shift != 0 {
+                modifiers.insert(.shift)
+            }
+            if preset.modifiers & KeyboardShortcut.Modifiers.command != 0 {
+                modifiers.insert(.command)
+            }
+
+            // Map keyCode to HotKey.Key
+            if let key = keyCodeToHotKey(preset.keyCode) {
+                let bundleID = preset.appBundleID  // Capture for closure
+                let worksWithOverlay = preset.worksWithOverlay  // Capture for closure
+                let hk = HotKey(key: key, modifiers: modifiers)
+                hk.keyDownHandler = { [weak self] in
+                    // If overlay is visible, delegate to overlay's handler (if preset supports it)
+                    if self?.overlayController?.window?.isVisible == true {
+                        if worksWithOverlay {
+                            print("[FocusHotKey] Overlay visible, delegating to overlay for \(bundleID)")
+                            self?.overlayController?.activateFocusPreset(bundleID: bundleID)
+                        } else {
+                            print("[FocusHotKey] Skipping - overlay visible but preset doesn't support overlay")
+                        }
+                        return
+                    }
+                    print("[FocusHotKey] Activated for \(bundleID)")
+                    FocusManager.shared.focusNextWindow(forBundleID: bundleID)
+                }
+                focusHotKeys.append(hk)
+                print("Registered focus hotkey: \(preset.shortcutDisplayString) -> \(preset.appName)")
+            } else {
+                print("Failed to register focus hotkey for \(preset.appName) - unknown key code: \(preset.keyCode)")
+            }
+        }
+
+        print("Registered \(focusHotKeys.count) focus hotkeys")
     }
 
     private func createHotKey(from shortcut: KeyboardShortcut) -> HotKey? {

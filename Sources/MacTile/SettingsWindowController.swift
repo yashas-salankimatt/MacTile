@@ -50,6 +50,12 @@ class SettingsWindowController: NSWindowController {
     private var presetsContainer: NSView!
     private var addPresetButton: NSButton!
 
+    // Focus tab
+    private var focusPresetRows: [FocusPresetRowView] = []
+    private var focusPresetsScrollView: NSScrollView!
+    private var focusPresetsContainer: NSView!
+    private var addFocusPresetButton: NSButton!
+
     // Appearance tab
     private var overlayOpacitySlider: NSSlider!
     private var overlayOpacityLabel: NSTextField!
@@ -142,6 +148,10 @@ class SettingsWindowController: NSWindowController {
         let presetsTab = createPresetsTab()
         presetsTab.label = "Presets"
         tabView.addTabViewItem(presetsTab)
+
+        let focusTab = createFocusTab()
+        focusTab.label = "Focus"
+        tabView.addTabViewItem(focusTab)
 
         let aboutTab = createAboutTab()
         aboutTab.label = "About"
@@ -680,6 +690,130 @@ class SettingsWindowController: NSWindowController {
         presetsContainer.needsLayout = true
     }
 
+    // MARK: - Focus Tab
+
+    private func createFocusTab() -> NSTabViewItem {
+        let item = NSTabViewItem()
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 460))
+
+        var y: CGFloat = 420
+
+        // Header
+        let headerLabel = createLabel("Application Focus Presets", frame: NSRect(x: 20, y: y, width: 300, height: 20))
+        headerLabel.font = NSFont.boldSystemFont(ofSize: 14)
+        view.addSubview(headerLabel)
+        y -= 20
+
+        let descLabel = createLabel("Define keyboard shortcuts to quickly switch focus between application windows", frame: NSRect(x: 20, y: y, width: 560, height: 16))
+        descLabel.font = NSFont.systemFont(ofSize: 11)
+        descLabel.textColor = .secondaryLabelColor
+        view.addSubview(descLabel)
+        y -= 30
+
+        // Column headers
+        let headerOffset: CGFloat = 12
+
+        let shortcutLabel = createLabel("Shortcut", frame: NSRect(x: headerOffset + 5, y: y, width: 100, height: 16))
+        shortcutLabel.font = NSFont.boldSystemFont(ofSize: 11)
+        view.addSubview(shortcutLabel)
+
+        let appLabel = createLabel("Application", frame: NSRect(x: headerOffset + 110, y: y, width: 180, height: 16))
+        appLabel.font = NSFont.boldSystemFont(ofSize: 11)
+        view.addSubview(appLabel)
+
+        let globalLabel = createLabel("Global", frame: NSRect(x: headerOffset + 340, y: y, width: 50, height: 16))
+        globalLabel.font = NSFont.boldSystemFont(ofSize: 11)
+        view.addSubview(globalLabel)
+
+        let overlayLabel = createLabel("Overlay", frame: NSRect(x: headerOffset + 400, y: y, width: 50, height: 16))
+        overlayLabel.font = NSFont.boldSystemFont(ofSize: 11)
+        view.addSubview(overlayLabel)
+        y -= 18
+
+        // Scroll view for focus presets
+        focusPresetsScrollView = NSScrollView(frame: NSRect(x: 10, y: 60, width: 580, height: y - 60))
+        focusPresetsScrollView.hasVerticalScroller = true
+        focusPresetsScrollView.hasHorizontalScroller = false
+        focusPresetsScrollView.autohidesScrollers = true
+        focusPresetsScrollView.borderType = .bezelBorder
+
+        focusPresetsContainer = NSView(frame: NSRect(x: 0, y: 0, width: 560, height: 300))
+        focusPresetsScrollView.documentView = focusPresetsContainer
+        view.addSubview(focusPresetsScrollView)
+
+        // Add preset button
+        addFocusPresetButton = NSButton(frame: NSRect(x: 20, y: 25, width: 140, height: 24))
+        addFocusPresetButton.title = "Add Focus Preset"
+        addFocusPresetButton.bezelStyle = .rounded
+        addFocusPresetButton.target = self
+        addFocusPresetButton.action = #selector(addFocusPreset)
+        view.addSubview(addFocusPresetButton)
+
+        item.view = view
+        return item
+    }
+
+    @objc private func addFocusPreset() {
+        // Create a default focus preset
+        let preset = FocusPreset(
+            keyCode: 0,
+            keyString: "",
+            modifiers: 0,
+            appBundleID: "",
+            appName: "Select App...",
+            worksWithoutOverlay: true,
+            worksWithOverlay: true
+        )
+        addFocusPresetRow(preset)
+        updateFocusPresetsContainerHeight()
+    }
+
+    private func addFocusPresetRow(_ preset: FocusPreset) {
+        let rowHeight: CGFloat = 35
+        let y = CGFloat(focusPresetRows.count) * rowHeight
+
+        let row = FocusPresetRowView(frame: NSRect(x: 0, y: y, width: 560, height: rowHeight), preset: preset)
+        row.onDelete = { [weak self, weak row] in
+            guard let self = self, let row = row else { return }
+            if let index = self.focusPresetRows.firstIndex(where: { $0 === row }) {
+                self.focusPresetRows.remove(at: index)
+                row.removeFromSuperview()
+                self.updateFocusPresetsContainerHeight()
+            }
+        }
+        focusPresetsContainer.addSubview(row)
+        focusPresetRows.append(row)
+    }
+
+    private func loadFocusPresets() {
+        let settings = SettingsManager.shared.settings
+
+        // Clear existing rows
+        for row in focusPresetRows {
+            row.removeFromSuperview()
+        }
+        focusPresetRows.removeAll()
+
+        // Add rows for existing presets
+        for preset in settings.focusPresets {
+            addFocusPresetRow(preset)
+        }
+        updateFocusPresetsContainerHeight()
+    }
+
+    private func updateFocusPresetsContainerHeight() {
+        let rowHeight: CGFloat = 35
+        let height = max(300, CGFloat(focusPresetRows.count) * rowHeight + 10)
+        focusPresetsContainer.frame.size.height = height
+
+        // Flip y coordinates since we want newest at top
+        for (i, row) in focusPresetRows.enumerated() {
+            row.frame.origin.y = height - CGFloat(i + 1) * rowHeight
+        }
+
+        focusPresetsContainer.needsLayout = true
+    }
+
     private func createAboutTab() -> NSTabViewItem {
         let item = NSTabViewItem()
         let view = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 460))
@@ -937,6 +1071,9 @@ class SettingsWindowController: NSWindowController {
             addPresetRow(preset)
         }
         updatePresetsContainerHeight()
+
+        // Load focus presets
+        loadFocusPresets()
     }
 
     // MARK: - Modifier/Key Conversion Helpers
@@ -1291,6 +1428,17 @@ class SettingsWindowController: NSWindowController {
         }
         SettingsManager.shared.updateTilingPresets(presets)
 
+        // Update focus presets
+        let focusPresets = focusPresetRows.compactMap { row -> FocusPreset? in
+            let preset = row.getPreset()
+            // Only include presets with a valid key binding and app
+            if preset.keyCode > 0 && !preset.keyString.isEmpty && !preset.appBundleID.isEmpty {
+                return preset
+            }
+            return nil
+        }
+        SettingsManager.shared.updateFocusPresets(focusPresets)
+
         window?.close()
     }
 
@@ -1589,5 +1737,283 @@ class PresetRowView: NSView {
             autoConfirm: autoConfirmCheckbox.state == .on,
             cycleTimeout: timeout
         )
+    }
+}
+
+// MARK: - FocusPresetRowView
+
+/// A row view for editing a single focus preset
+class FocusPresetRowView: NSView {
+    private var recordButton: NSButton!
+    private var appPopup: NSPopUpButton!
+    private var globalCheckbox: NSButton!
+    private var overlayCheckbox: NSButton!
+    private var deleteButton: NSButton!
+
+    private var isRecording = false
+    private var localMonitor: Any?
+
+    var preset: FocusPreset {
+        didSet {
+            updateUI()
+        }
+    }
+
+    var onDelete: (() -> Void)?
+
+    init(frame: NSRect, preset: FocusPreset) {
+        self.preset = preset
+        super.init(frame: frame)
+        setupUI()
+        updateUI()
+    }
+
+    override init(frame: NSRect) {
+        self.preset = FocusPreset(
+            keyCode: 0,
+            keyString: "",
+            modifiers: 0,
+            appBundleID: "",
+            appName: "Select App...",
+            worksWithoutOverlay: true,
+            worksWithOverlay: true
+        )
+        super.init(frame: frame)
+        setupUI()
+        updateUI()
+    }
+
+    required init?(coder: NSCoder) {
+        self.preset = FocusPreset(
+            keyCode: 0,
+            keyString: "",
+            modifiers: 0,
+            appBundleID: "",
+            appName: "Select App...",
+            worksWithoutOverlay: true,
+            worksWithOverlay: true
+        )
+        super.init(coder: coder)
+        setupUI()
+        updateUI()
+    }
+
+    private func setupUI() {
+        let y: CGFloat = 5
+        var x: CGFloat = 5
+
+        // Record button for shortcut
+        recordButton = NSButton(frame: NSRect(x: x, y: y, width: 100, height: 22))
+        recordButton.title = "Record"
+        recordButton.bezelStyle = .rounded
+        recordButton.font = NSFont.systemFont(ofSize: 11)
+        recordButton.target = self
+        recordButton.action = #selector(toggleRecord)
+        addSubview(recordButton)
+        x += 105
+
+        // App selection popup
+        appPopup = NSPopUpButton(frame: NSRect(x: x, y: y, width: 220, height: 22))
+        appPopup.font = NSFont.systemFont(ofSize: 11)
+        appPopup.target = self
+        appPopup.action = #selector(appSelected)
+        populateAppPopup()
+        addSubview(appPopup)
+        x += 225
+
+        // Global checkbox (works without overlay)
+        globalCheckbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(globalChanged))
+        globalCheckbox.frame = NSRect(x: x, y: y, width: 22, height: 22)
+        addSubview(globalCheckbox)
+        x += 60
+
+        // Overlay checkbox (works with overlay)
+        overlayCheckbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(overlayChanged))
+        overlayCheckbox.frame = NSRect(x: x, y: y, width: 22, height: 22)
+        addSubview(overlayCheckbox)
+        x += 45
+
+        // Delete button
+        deleteButton = NSButton(frame: NSRect(x: x, y: y, width: 65, height: 22))
+        deleteButton.title = "Delete"
+        deleteButton.bezelStyle = .rounded
+        deleteButton.font = NSFont.systemFont(ofSize: 11)
+        deleteButton.target = self
+        deleteButton.action = #selector(deletePressed)
+        addSubview(deleteButton)
+    }
+
+    private func populateAppPopup() {
+        appPopup.removeAllItems()
+        appPopup.addItem(withTitle: "Select App...")
+
+        let runningApps = FocusManager.shared.getRunningApps()
+        for app in runningApps {
+            let item = NSMenuItem(title: app.name, action: nil, keyEquivalent: "")
+            item.representedObject = app.bundleID
+            appPopup.menu?.addItem(item)
+        }
+    }
+
+    private func updateUI() {
+        // Update record button with full shortcut display
+        if preset.keyString.isEmpty {
+            recordButton.title = "Record"
+        } else {
+            recordButton.title = preset.shortcutDisplayString
+        }
+
+        // Update app popup selection
+        if preset.appBundleID.isEmpty {
+            appPopup.selectItem(at: 0)
+        } else {
+            // Find and select the matching app
+            var found = false
+            for i in 0..<appPopup.numberOfItems {
+                if let item = appPopup.item(at: i),
+                   let bundleID = item.representedObject as? String,
+                   bundleID == preset.appBundleID {
+                    appPopup.selectItem(at: i)
+                    found = true
+                    break
+                }
+            }
+            // If app not found in running apps, add it manually
+            if !found && !preset.appName.isEmpty {
+                let item = NSMenuItem(title: preset.appName, action: nil, keyEquivalent: "")
+                item.representedObject = preset.appBundleID
+                appPopup.menu?.addItem(item)
+                appPopup.select(item)
+            }
+        }
+
+        // Update checkboxes
+        globalCheckbox.state = preset.worksWithoutOverlay ? .on : .off
+        overlayCheckbox.state = preset.worksWithOverlay ? .on : .off
+    }
+
+    @objc private func toggleRecord() {
+        isRecording.toggle()
+
+        if isRecording {
+            recordButton.title = "Press key..."
+            window?.makeFirstResponder(nil)
+
+            localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self = self, self.isRecording else { return event }
+
+                // Escape cancels recording
+                if event.keyCode == 53 && !event.modifierFlags.contains(.shift) {
+                    self.isRecording = false
+                    self.updateUI()
+                    if let monitor = self.localMonitor {
+                        NSEvent.removeMonitor(monitor)
+                        self.localMonitor = nil
+                    }
+                    return nil
+                }
+
+                // Don't allow Tab
+                if event.keyCode == 48 {
+                    return nil
+                }
+
+                let keyString = self.keyCodeToString(event.keyCode)
+
+                // Capture modifiers from the key event
+                var modifiers: UInt = 0
+                if event.modifierFlags.contains(.control) { modifiers |= KeyboardShortcut.Modifiers.control }
+                if event.modifierFlags.contains(.option) { modifiers |= KeyboardShortcut.Modifiers.option }
+                if event.modifierFlags.contains(.shift) { modifiers |= KeyboardShortcut.Modifiers.shift }
+                if event.modifierFlags.contains(.command) { modifiers |= KeyboardShortcut.Modifiers.command }
+
+                self.preset = FocusPreset(
+                    keyCode: event.keyCode,
+                    keyString: keyString,
+                    modifiers: modifiers,
+                    appBundleID: self.preset.appBundleID,
+                    appName: self.preset.appName,
+                    worksWithoutOverlay: self.preset.worksWithoutOverlay,
+                    worksWithOverlay: self.preset.worksWithOverlay
+                )
+
+                self.isRecording = false
+                if let monitor = self.localMonitor {
+                    NSEvent.removeMonitor(monitor)
+                    self.localMonitor = nil
+                }
+                return nil
+            }
+        } else {
+            updateUI()
+            if let monitor = localMonitor {
+                NSEvent.removeMonitor(monitor)
+                localMonitor = nil
+            }
+        }
+    }
+
+    @objc private func appSelected() {
+        guard let selectedItem = appPopup.selectedItem else { return }
+
+        if let bundleID = selectedItem.representedObject as? String {
+            preset = FocusPreset(
+                keyCode: preset.keyCode,
+                keyString: preset.keyString,
+                modifiers: preset.modifiers,
+                appBundleID: bundleID,
+                appName: selectedItem.title,
+                worksWithoutOverlay: preset.worksWithoutOverlay,
+                worksWithOverlay: preset.worksWithOverlay
+            )
+        }
+    }
+
+    @objc private func globalChanged() {
+        preset = FocusPreset(
+            keyCode: preset.keyCode,
+            keyString: preset.keyString,
+            modifiers: preset.modifiers,
+            appBundleID: preset.appBundleID,
+            appName: preset.appName,
+            worksWithoutOverlay: globalCheckbox.state == .on,
+            worksWithOverlay: preset.worksWithOverlay
+        )
+    }
+
+    @objc private func overlayChanged() {
+        preset = FocusPreset(
+            keyCode: preset.keyCode,
+            keyString: preset.keyString,
+            modifiers: preset.modifiers,
+            appBundleID: preset.appBundleID,
+            appName: preset.appName,
+            worksWithoutOverlay: preset.worksWithoutOverlay,
+            worksWithOverlay: overlayCheckbox.state == .on
+        )
+    }
+
+    @objc private func deletePressed() {
+        onDelete?()
+    }
+
+    private func keyCodeToString(_ keyCode: UInt16) -> String {
+        let keyMap: [UInt16: String] = [
+            0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X",
+            8: "C", 9: "V", 11: "B", 12: "Q", 13: "W", 14: "E", 15: "R",
+            16: "Y", 17: "T", 18: "1", 19: "2", 20: "3", 21: "4", 22: "6",
+            23: "5", 24: "=", 25: "9", 26: "7", 27: "-", 28: "8", 29: "0",
+            30: "]", 31: "O", 32: "U", 33: "[", 34: "I", 35: "P", 36: "Return",
+            37: "L", 38: "J", 39: "'", 40: "K", 41: ";", 42: "\\", 43: ",",
+            44: "/", 45: "N", 46: "M", 47: ".", 49: "Space",
+            50: "`", 51: "Delete", 53: "Escape",
+            123: "←", 124: "→", 125: "↓", 126: "↑"
+        ]
+        return keyMap[keyCode] ?? "Key\(keyCode)"
+    }
+
+    /// Get the current preset from UI state
+    func getPreset() -> FocusPreset {
+        return preset
     }
 }
