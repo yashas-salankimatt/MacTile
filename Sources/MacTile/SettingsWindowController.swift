@@ -42,6 +42,12 @@ class SettingsWindowController: NSWindowController {
     private var cancelKeyPopup: NSPopUpButton!
     private var cycleGridKeyPopup: NSPopUpButton!
 
+    // Presets tab
+    private var presetRows: [PresetRowView] = []
+    private var presetsScrollView: NSScrollView!
+    private var presetsContainer: NSView!
+    private var addPresetButton: NSButton!
+
     // Appearance tab
     private var overlayOpacitySlider: NSSlider!
     private var overlayOpacityLabel: NSTextField!
@@ -95,6 +101,10 @@ class SettingsWindowController: NSWindowController {
         let appearanceTab = createAppearanceTab()
         appearanceTab.label = "Appearance"
         tabView.addTabViewItem(appearanceTab)
+
+        let presetsTab = createPresetsTab()
+        presetsTab.label = "Presets"
+        tabView.addTabViewItem(presetsTab)
 
         let aboutTab = createAboutTab()
         aboutTab.label = "About"
@@ -506,6 +516,132 @@ class SettingsWindowController: NSWindowController {
         return item
     }
 
+    private func createPresetsTab() -> NSTabViewItem {
+        let item = NSTabViewItem()
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 460))
+
+        var y: CGFloat = 420
+
+        // Header
+        let headerLabel = createLabel("Quick Tiling Presets", frame: NSRect(x: 20, y: y, width: 300, height: 20))
+        headerLabel.font = NSFont.boldSystemFont(ofSize: 14)
+        view.addSubview(headerLabel)
+        y -= 20
+
+        let descLabel = createLabel("Define keyboard shortcuts for quick window positioning (0-10 presets)", frame: NSRect(x: 20, y: y, width: 480, height: 16))
+        descLabel.font = NSFont.systemFont(ofSize: 11)
+        descLabel.textColor = .secondaryLabelColor
+        view.addSubview(descLabel)
+        y -= 30
+
+        // Column headers (aligned with PresetRowView elements)
+        // Scroll view at x=10 with ~2px bezel border inset, so content starts at ~12
+        // Row elements: Key at x=5, Coords at x=95, Auto at x=335, Delete at x=395
+        let headerOffset: CGFloat = 12  // scroll view x (10) + border inset (2)
+
+        let keyLabel = createLabel("Key", frame: NSRect(x: headerOffset + 5, y: y, width: 80, height: 16))
+        keyLabel.font = NSFont.boldSystemFont(ofSize: 11)
+        view.addSubview(keyLabel)
+
+        let coordLabel = createLabel("Coordinates (x1,y1);(x2,y2)", frame: NSRect(x: headerOffset + 95, y: y, width: 200, height: 16))
+        coordLabel.font = NSFont.boldSystemFont(ofSize: 11)
+        view.addSubview(coordLabel)
+
+        let autoLabel = createLabel("Auto-Apply", frame: NSRect(x: headerOffset + 310, y: y, width: 75, height: 16))
+        autoLabel.font = NSFont.boldSystemFont(ofSize: 11)
+        view.addSubview(autoLabel)
+        y -= 18  // header height (16) + small gap (2)
+
+        // Scroll view for presets
+        presetsScrollView = NSScrollView(frame: NSRect(x: 10, y: 60, width: 500, height: y - 60))
+        presetsScrollView.hasVerticalScroller = true
+        presetsScrollView.hasHorizontalScroller = false
+        presetsScrollView.autohidesScrollers = true
+        presetsScrollView.borderType = .bezelBorder
+
+        presetsContainer = NSView(frame: NSRect(x: 0, y: 0, width: 480, height: 300))
+        presetsScrollView.documentView = presetsContainer
+        view.addSubview(presetsScrollView)
+
+        // Add preset button
+        addPresetButton = NSButton(frame: NSRect(x: 20, y: 25, width: 120, height: 24))
+        addPresetButton.title = "Add Preset"
+        addPresetButton.bezelStyle = .rounded
+        addPresetButton.target = self
+        addPresetButton.action = #selector(addPreset)
+        view.addSubview(addPresetButton)
+
+        // Help text
+        let helpLabel = createLabel("Coordinates: (0,0) = top-left, (1,1) = bottom-right. Example: (0.5,0);(1,1) = right half", frame: NSRect(x: 150, y: 27, width: 350, height: 16))
+        helpLabel.font = NSFont.systemFont(ofSize: 10)
+        helpLabel.textColor = .secondaryLabelColor
+        view.addSubview(helpLabel)
+
+        item.view = view
+        return item
+    }
+
+    @objc private func addPreset() {
+        guard presetRows.count < 10 else {
+            let alert = NSAlert()
+            alert.messageText = "Maximum Presets Reached"
+            alert.informativeText = "You can have at most 10 presets."
+            alert.alertStyle = .informational
+            alert.runModal()
+            return
+        }
+
+        let preset = TilingPreset(
+            keyCode: 0,
+            keyString: "",
+            startX: 0,
+            startY: 0,
+            endX: 0.5,
+            endY: 1,
+            autoConfirm: true
+        )
+        addPresetRow(preset)
+        updatePresetsContainerHeight()
+    }
+
+    private func addPresetRow(_ preset: TilingPreset) {
+        let rowHeight: CGFloat = 35
+        let y = CGFloat(presetRows.count) * rowHeight
+
+        let row = PresetRowView(frame: NSRect(x: 0, y: y, width: 480, height: rowHeight), preset: preset)
+        row.onDelete = { [weak self] in
+            self?.removePresetRow(row)
+        }
+        presetsContainer.addSubview(row)
+        presetRows.append(row)
+    }
+
+    private func removePresetRow(_ row: PresetRowView) {
+        guard let index = presetRows.firstIndex(of: row) else { return }
+        row.removeFromSuperview()
+        presetRows.remove(at: index)
+
+        // Reposition remaining rows
+        for (i, row) in presetRows.enumerated() {
+            let rowHeight: CGFloat = 35
+            row.frame.origin.y = CGFloat(i) * rowHeight
+        }
+        updatePresetsContainerHeight()
+    }
+
+    private func updatePresetsContainerHeight() {
+        let rowHeight: CGFloat = 35
+        let height = max(300, CGFloat(presetRows.count) * rowHeight + 10)
+        presetsContainer.frame.size.height = height
+
+        // Flip y coordinates since we want newest at top
+        for (i, row) in presetRows.enumerated() {
+            row.frame.origin.y = height - CGFloat(i + 1) * rowHeight
+        }
+
+        presetsContainer.needsLayout = true
+    }
+
     private func createAboutTab() -> NSTabViewItem {
         let item = NSTabViewItem()
         let view = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 460))
@@ -750,6 +886,19 @@ class SettingsWindowController: NSWindowController {
 
         anchorMarkerColorWell.color = appearance.anchorMarkerColor.nsColor
         targetMarkerColorWell.color = appearance.targetMarkerColor.nsColor
+
+        // Load presets
+        // Clear existing preset rows
+        for row in presetRows {
+            row.removeFromSuperview()
+        }
+        presetRows.removeAll()
+
+        // Add rows for existing presets
+        for preset in settings.tilingPresets {
+            addPresetRow(preset)
+        }
+        updatePresetsContainerHeight()
     }
 
     // MARK: - Modifier/Key Conversion Helpers
@@ -1049,6 +1198,17 @@ class SettingsWindowController: NSWindowController {
         )
         SettingsManager.shared.updateAppearance(appearanceSettings)
 
+        // Update tiling presets
+        let presets = presetRows.compactMap { row -> TilingPreset? in
+            let preset = row.getPreset()
+            // Only include presets with a valid key binding
+            if preset.keyCode > 0 && !preset.keyString.isEmpty {
+                return preset
+            }
+            return nil
+        }
+        SettingsManager.shared.updateTilingPresets(presets)
+
         window?.close()
     }
 
@@ -1083,5 +1243,210 @@ extension SettingsColor {
             blue: blue,
             alpha: alpha
         )
+    }
+}
+
+// MARK: - PresetRowView
+
+/// A row view for editing a single tiling preset
+class PresetRowView: NSView {
+    private var keyButton: NSButton!
+    private var coordinatesField: NSTextField!
+    private var autoConfirmCheckbox: NSButton!
+    private var deleteButton: NSButton!
+
+    private var isRecordingKey = false
+    private var localMonitor: Any?
+
+    var preset: TilingPreset {
+        didSet {
+            updateUI()
+        }
+    }
+
+    var onDelete: (() -> Void)?
+
+    init(frame: NSRect, preset: TilingPreset) {
+        self.preset = preset
+        super.init(frame: frame)
+        setupUI()
+        updateUI()
+    }
+
+    override init(frame: NSRect) {
+        self.preset = TilingPreset(keyCode: 0, keyString: "", startX: 0, startY: 0, endX: 0.5, endY: 1, autoConfirm: true)
+        super.init(frame: frame)
+        setupUI()
+        updateUI()
+    }
+
+    required init?(coder: NSCoder) {
+        self.preset = TilingPreset(keyCode: 0, keyString: "", startX: 0, startY: 0, endX: 0.5, endY: 1, autoConfirm: true)
+        super.init(coder: coder)
+        setupUI()
+        updateUI()
+    }
+
+    private func setupUI() {
+        // Key recording button
+        keyButton = NSButton(frame: NSRect(x: 5, y: 3, width: 80, height: 24))
+        keyButton.title = "Record"
+        keyButton.bezelStyle = .rounded
+        keyButton.target = self
+        keyButton.action = #selector(toggleRecordKey)
+        addSubview(keyButton)
+
+        // Coordinates field
+        coordinatesField = NSTextField(frame: NSRect(x: 95, y: 5, width: 200, height: 22))
+        coordinatesField.placeholderString = "(0,0);(0.5,1)"
+        coordinatesField.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        coordinatesField.target = self
+        coordinatesField.action = #selector(coordinatesChanged)
+        addSubview(coordinatesField)
+
+        // Auto-confirm checkbox
+        autoConfirmCheckbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(autoConfirmChanged))
+        autoConfirmCheckbox.frame = NSRect(x: 335, y: 5, width: 20, height: 20)
+        addSubview(autoConfirmCheckbox)
+
+        // Delete button
+        deleteButton = NSButton(frame: NSRect(x: 395, y: 3, width: 70, height: 24))
+        deleteButton.title = "Delete"
+        deleteButton.bezelStyle = .rounded
+        deleteButton.target = self
+        deleteButton.action = #selector(deletePressed)
+        addSubview(deleteButton)
+    }
+
+    private func updateUI() {
+        if preset.keyString.isEmpty {
+            keyButton.title = "Record"
+        } else {
+            keyButton.title = preset.keyString
+        }
+        coordinatesField.stringValue = preset.coordinateString
+        autoConfirmCheckbox.state = preset.autoConfirm ? .on : .off
+    }
+
+    @objc private func toggleRecordKey() {
+        isRecordingKey.toggle()
+
+        if isRecordingKey {
+            keyButton.title = "Press..."
+            window?.makeFirstResponder(nil)
+
+            localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self = self, self.isRecordingKey else { return event }
+
+                // Escape cancels recording
+                if event.keyCode == 53 {
+                    self.isRecordingKey = false
+                    self.keyButton.title = self.preset.keyString.isEmpty ? "Record" : self.preset.keyString
+                    if let monitor = self.localMonitor {
+                        NSEvent.removeMonitor(monitor)
+                        self.localMonitor = nil
+                    }
+                    return nil
+                }
+
+                // Only allow alphanumeric keys (no modifiers for presets)
+                if !event.modifierFlags.contains(.command) &&
+                   !event.modifierFlags.contains(.control) &&
+                   !event.modifierFlags.contains(.option) {
+
+                    let keyString = self.keyCodeToString(event.keyCode)
+
+                    // Don't allow Tab (reserved for monitor switching)
+                    if event.keyCode == 48 {
+                        return nil
+                    }
+
+                    self.preset = TilingPreset(
+                        keyCode: event.keyCode,
+                        keyString: keyString,
+                        startX: self.preset.startX,
+                        startY: self.preset.startY,
+                        endX: self.preset.endX,
+                        endY: self.preset.endY,
+                        autoConfirm: self.preset.autoConfirm
+                    )
+
+                    self.isRecordingKey = false
+                    if let monitor = self.localMonitor {
+                        NSEvent.removeMonitor(monitor)
+                        self.localMonitor = nil
+                    }
+                }
+                return nil
+            }
+        } else {
+            keyButton.title = preset.keyString.isEmpty ? "Record" : preset.keyString
+            if let monitor = localMonitor {
+                NSEvent.removeMonitor(monitor)
+                localMonitor = nil
+            }
+        }
+    }
+
+    @objc private func coordinatesChanged() {
+        if let coords = TilingPreset.parseCoordinates(coordinatesField.stringValue) {
+            preset = TilingPreset(
+                keyCode: preset.keyCode,
+                keyString: preset.keyString,
+                startX: coords.startX,
+                startY: coords.startY,
+                endX: coords.endX,
+                endY: coords.endY,
+                autoConfirm: preset.autoConfirm
+            )
+        }
+    }
+
+    @objc private func autoConfirmChanged() {
+        preset = TilingPreset(
+            keyCode: preset.keyCode,
+            keyString: preset.keyString,
+            startX: preset.startX,
+            startY: preset.startY,
+            endX: preset.endX,
+            endY: preset.endY,
+            autoConfirm: autoConfirmCheckbox.state == .on
+        )
+    }
+
+    @objc private func deletePressed() {
+        onDelete?()
+    }
+
+    private func keyCodeToString(_ keyCode: UInt16) -> String {
+        let keyMap: [UInt16: String] = [
+            0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X",
+            8: "C", 9: "V", 11: "B", 12: "Q", 13: "W", 14: "E", 15: "R",
+            16: "Y", 17: "T", 18: "1", 19: "2", 20: "3", 21: "4", 22: "6",
+            23: "5", 24: "=", 25: "9", 26: "7", 27: "-", 28: "8", 29: "0",
+            30: "]", 31: "O", 32: "U", 33: "[", 34: "I", 35: "P", 36: "Return",
+            37: "L", 38: "J", 39: "'", 40: "K", 41: ";", 42: "\\", 43: ",",
+            44: "/", 45: "N", 46: "M", 47: ".", 49: "Space",
+            50: "`", 51: "Delete", 53: "Escape",
+            123: "←", 124: "→", 125: "↓", 126: "↑"
+        ]
+        return keyMap[keyCode] ?? "Key\(keyCode)"
+    }
+
+    /// Get the current preset from UI state
+    func getPreset() -> TilingPreset {
+        // Parse coordinates from field in case user edited it
+        if let coords = TilingPreset.parseCoordinates(coordinatesField.stringValue) {
+            return TilingPreset(
+                keyCode: preset.keyCode,
+                keyString: preset.keyString,
+                startX: coords.startX,
+                startY: coords.startY,
+                endX: coords.endX,
+                endY: coords.endY,
+                autoConfirm: autoConfirmCheckbox.state == .on
+            )
+        }
+        return preset
     }
 }

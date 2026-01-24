@@ -200,6 +200,148 @@ public struct OverlayKeyboardSettings: Equatable, Codable {
     }
 }
 
+// MARK: - Tiling Preset
+
+/// A keyboard shortcut that tiles to a proportional screen region
+public struct TilingPreset: Codable, Equatable {
+    /// The key code for this preset
+    public var keyCode: UInt16
+    /// Human-readable key name (e.g., "R", "1")
+    public var keyString: String
+
+    /// Start X coordinate as proportion (0.0 to 1.0, where 0 = left edge)
+    public var startX: CGFloat
+    /// Start Y coordinate as proportion (0.0 to 1.0, where 0 = top edge)
+    public var startY: CGFloat
+    /// End X coordinate as proportion (0.0 to 1.0, where 1 = right edge)
+    public var endX: CGFloat
+    /// End Y coordinate as proportion (0.0 to 1.0, where 1 = bottom edge)
+    public var endY: CGFloat
+
+    /// If true, immediately apply the selection; if false, just select the area
+    public var autoConfirm: Bool
+
+    public init(
+        keyCode: UInt16,
+        keyString: String,
+        startX: CGFloat,
+        startY: CGFloat,
+        endX: CGFloat,
+        endY: CGFloat,
+        autoConfirm: Bool
+    ) {
+        self.keyCode = keyCode
+        self.keyString = keyString
+        self.startX = max(0, min(1, startX))
+        self.startY = max(0, min(1, startY))
+        self.endX = max(0, min(1, endX))
+        self.endY = max(0, min(1, endY))
+        self.autoConfirm = autoConfirm
+    }
+
+    /// Display string for the coordinates
+    public var coordinateString: String {
+        return String(format: "(%.2f,%.2f);(%.2f,%.2f)", startX, startY, endX, endY)
+    }
+
+    /// Parse coordinates from string format "(x1,y1);(x2,y2)"
+    public static func parseCoordinates(_ string: String) -> (startX: CGFloat, startY: CGFloat, endX: CGFloat, endY: CGFloat)? {
+        // Remove whitespace and parentheses
+        let cleaned = string.replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "(", with: "")
+            .replacingOccurrences(of: ")", with: "")
+
+        let parts = cleaned.split(separator: ";")
+        guard parts.count == 2 else { return nil }
+
+        let start = parts[0].split(separator: ",")
+        let end = parts[1].split(separator: ",")
+
+        guard start.count == 2, end.count == 2,
+              let x1 = Double(start[0]), let y1 = Double(start[1]),
+              let x2 = Double(end[0]), let y2 = Double(end[1]) else {
+            return nil
+        }
+
+        return (CGFloat(x1), CGFloat(y1), CGFloat(x2), CGFloat(y2))
+    }
+
+    /// Convert proportional coordinates to a grid selection
+    /// - Sizes are rounded down
+    /// - Position is determined by center of mass:
+    ///   - If center is on left half, align to left
+    ///   - If center is on right half, align to right
+    ///   - Same logic for top/bottom
+    public func toGridSelection(gridSize: GridSize) -> GridSelection {
+        // Normalize so start <= end
+        let x1 = min(startX, endX)
+        let y1 = min(startY, endY)
+        let x2 = max(startX, endX)
+        let y2 = max(startY, endY)
+
+        // Calculate the center of the preset area
+        let centerX = (x1 + x2) / 2
+        let centerY = (y1 + y2) / 2
+
+        // Calculate the size in grid units (round down, minimum 1)
+        let widthProportion = x2 - x1
+        let heightProportion = y2 - y1
+
+        let gridWidth = max(1, Int(widthProportion * CGFloat(gridSize.cols)))
+        let gridHeight = max(1, Int(heightProportion * CGFloat(gridSize.rows)))
+
+        // Calculate starting position based on center of mass
+        let startCol: Int
+        if centerX < 0.5 {
+            // Left side - start from the proportional position, round down
+            startCol = Int(x1 * CGFloat(gridSize.cols))
+        } else {
+            // Right side - align so selection ends at the right edge of the proportional area
+            let endCol = Int(ceil(x2 * CGFloat(gridSize.cols))) - 1
+            startCol = max(0, endCol - gridWidth + 1)
+        }
+
+        let startRow: Int
+        if centerY < 0.5 {
+            // Top side - start from the proportional position, round down
+            startRow = Int(y1 * CGFloat(gridSize.rows))
+        } else {
+            // Bottom side - align so selection ends at the bottom edge
+            let endRow = Int(ceil(y2 * CGFloat(gridSize.rows))) - 1
+            startRow = max(0, endRow - gridHeight + 1)
+        }
+
+        // Clamp to grid bounds
+        let clampedStartCol = max(0, min(gridSize.cols - gridWidth, startCol))
+        let clampedStartRow = max(0, min(gridSize.rows - gridHeight, startRow))
+
+        let endCol = min(gridSize.cols - 1, clampedStartCol + gridWidth - 1)
+        let endRow = min(gridSize.rows - 1, clampedStartRow + gridHeight - 1)
+
+        return GridSelection(
+            anchor: GridOffset(col: clampedStartCol, row: clampedStartRow),
+            target: GridOffset(col: endCol, row: endRow)
+        )
+    }
+
+    /// Common presets
+    public static let leftHalf = TilingPreset(
+        keyCode: 0, keyString: "", startX: 0, startY: 0, endX: 0.5, endY: 1, autoConfirm: true
+    )
+    public static let rightHalf = TilingPreset(
+        keyCode: 0, keyString: "", startX: 0.5, startY: 0, endX: 1, endY: 1, autoConfirm: true
+    )
+    public static let topHalf = TilingPreset(
+        keyCode: 0, keyString: "", startX: 0, startY: 0, endX: 1, endY: 0.5, autoConfirm: true
+    )
+    public static let bottomHalf = TilingPreset(
+        keyCode: 0, keyString: "", startX: 0, startY: 0.5, endX: 1, endY: 1, autoConfirm: true
+    )
+    public static let fullScreen = TilingPreset(
+        keyCode: 0, keyString: "", startX: 0, startY: 0, endX: 1, endY: 1, autoConfirm: true
+    )
+}
+
 // MARK: - MacTile Settings
 
 /// All configurable settings for MacTile
@@ -256,6 +398,9 @@ public struct MacTileSettings: Codable, Equatable {
     /// Overlay keyboard configuration
     public var overlayKeyboard: OverlayKeyboardSettings
 
+    /// Quick tiling presets (0-10 presets)
+    public var tilingPresets: [TilingPreset]
+
     // MARK: - Appearance
 
     /// Visual appearance settings
@@ -284,6 +429,7 @@ public struct MacTileSettings: Codable, Equatable {
         toggleOverlayShortcut: .defaultToggleOverlay,
         secondaryToggleOverlayShortcut: .defaultSecondaryToggleOverlay,
         overlayKeyboard: .default,
+        tilingPresets: [],
         appearance: .default
     )
 
@@ -300,6 +446,7 @@ public struct MacTileSettings: Codable, Equatable {
         toggleOverlayShortcut: KeyboardShortcut,
         secondaryToggleOverlayShortcut: KeyboardShortcut?,
         overlayKeyboard: OverlayKeyboardSettings,
+        tilingPresets: [TilingPreset],
         appearance: AppearanceSettings
     ) {
         self.gridSizes = gridSizes.isEmpty ? Self.defaultGridSizes : gridSizes
@@ -314,6 +461,8 @@ public struct MacTileSettings: Codable, Equatable {
         self.toggleOverlayShortcut = toggleOverlayShortcut
         self.secondaryToggleOverlayShortcut = secondaryToggleOverlayShortcut
         self.overlayKeyboard = overlayKeyboard
+        // Limit to 10 presets
+        self.tilingPresets = Array(tilingPresets.prefix(10))
         self.appearance = appearance
     }
 }

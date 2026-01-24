@@ -68,6 +68,7 @@ class SettingsManager {
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
             secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
+            tilingPresets: settings.tilingPresets,
             appearance: settings.appearance
         )
         settings = newSettings
@@ -87,6 +88,7 @@ class SettingsManager {
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
             secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
+            tilingPresets: settings.tilingPresets,
             appearance: settings.appearance
         )
     }
@@ -105,6 +107,7 @@ class SettingsManager {
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
             secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
+            tilingPresets: settings.tilingPresets,
             appearance: settings.appearance
         )
     }
@@ -123,6 +126,7 @@ class SettingsManager {
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
             secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
+            tilingPresets: settings.tilingPresets,
             appearance: settings.appearance
         )
     }
@@ -141,6 +145,7 @@ class SettingsManager {
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
             secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
+            tilingPresets: settings.tilingPresets,
             appearance: settings.appearance
         )
     }
@@ -159,6 +164,7 @@ class SettingsManager {
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
             secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
+            tilingPresets: settings.tilingPresets,
             appearance: settings.appearance
         )
     }
@@ -177,6 +183,7 @@ class SettingsManager {
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
             secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
+            tilingPresets: settings.tilingPresets,
             appearance: settings.appearance
         )
     }
@@ -195,6 +202,7 @@ class SettingsManager {
             toggleOverlayShortcut: shortcut,
             secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
+            tilingPresets: settings.tilingPresets,
             appearance: settings.appearance
         )
     }
@@ -213,6 +221,7 @@ class SettingsManager {
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
             secondaryToggleOverlayShortcut: shortcut,
             overlayKeyboard: settings.overlayKeyboard,
+            tilingPresets: settings.tilingPresets,
             appearance: settings.appearance
         )
     }
@@ -231,6 +240,26 @@ class SettingsManager {
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
             secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: keyboard,
+            tilingPresets: settings.tilingPresets,
+            appearance: settings.appearance
+        )
+    }
+
+    func updateTilingPresets(_ presets: [TilingPreset]) {
+        settings = MacTileSettings(
+            gridSizes: settings.gridSizes,
+            windowSpacing: settings.windowSpacing,
+            insets: settings.insets,
+            autoClose: settings.autoClose,
+            showMenuBarIcon: settings.showMenuBarIcon,
+            launchAtLogin: settings.launchAtLogin,
+            confirmOnClickWithoutDrag: settings.confirmOnClickWithoutDrag,
+            showHelpText: settings.showHelpText,
+            showMonitorIndicator: settings.showMonitorIndicator,
+            toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
+            overlayKeyboard: settings.overlayKeyboard,
+            tilingPresets: presets,
             appearance: settings.appearance
         )
     }
@@ -249,6 +278,7 @@ class SettingsManager {
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
             secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
+            tilingPresets: settings.tilingPresets,
             appearance: appearance
         )
     }
@@ -267,6 +297,7 @@ class SettingsManager {
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
             secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
+            tilingPresets: settings.tilingPresets,
             appearance: settings.appearance
         )
     }
@@ -285,6 +316,7 @@ class SettingsManager {
             toggleOverlayShortcut: settings.toggleOverlayShortcut,
             secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
             overlayKeyboard: settings.overlayKeyboard,
+            tilingPresets: settings.tilingPresets,
             appearance: settings.appearance
         )
     }

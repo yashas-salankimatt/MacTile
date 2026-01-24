@@ -119,6 +119,7 @@ class OverlayWindowController: NSWindowController {
         windowTiler.insets = settings.insets
         gridView?.gridPresets = settings.gridSizes
         gridView?.keyboardSettings = settings.overlayKeyboard
+        gridView?.tilingPresets = settings.tilingPresets
         gridView?.appearanceSettings = settings.appearance
         gridView?.showHelpText = settings.showHelpText
         gridView?.showMonitorIndicator = settings.showMonitorIndicator
@@ -150,6 +151,7 @@ class OverlayWindowController: NSWindowController {
         gridView.showHelpText = settings.showHelpText
         gridView.showMonitorIndicator = settings.showMonitorIndicator
         gridView.confirmOnClickWithoutDrag = settings.confirmOnClickWithoutDrag
+        gridView.tilingPresets = settings.tilingPresets
         gridView.onSelectionConfirmed = { [weak self] selection in
             self?.applySelection(selection)
         }
@@ -580,6 +582,7 @@ class GridOverlayView: NSView {
 
     var gridPresets: [GridSize]
     var keyboardSettings: OverlayKeyboardSettings
+    var tilingPresets: [TilingPreset] = []
     var appearanceSettings: AppearanceSettings {
         didSet {
             needsDisplay = true
@@ -771,8 +774,28 @@ class GridOverlayView: NSView {
             return
         }
 
-        // Get current modifier state
+        // Check for tiling presets first (only without modifiers to avoid conflicts)
         let modifiers = event.modifierFlags
+        let hasModifiers = modifiers.contains(.shift) || modifiers.contains(.option) ||
+                          modifiers.contains(.control) || modifiers.contains(.command)
+
+        if !hasModifiers {
+            for preset in tilingPresets {
+                if event.keyCode == preset.keyCode {
+                    print("Preset matched: \(preset.keyString) -> \(preset.coordinateString)")
+                    let presetSelection = preset.toGridSelection(gridSize: gridSize)
+                    selection = presetSelection
+
+                    if preset.autoConfirm {
+                        print("Auto-confirming preset")
+                        onSelectionConfirmed?(presetSelection)
+                    }
+                    return
+                }
+            }
+        }
+
+        // Get current modifier state
         var currentModifier: UInt = KeyboardShortcut.Modifiers.none
         if modifiers.contains(.shift) {
             currentModifier |= KeyboardShortcut.Modifiers.shift
