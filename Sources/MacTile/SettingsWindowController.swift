@@ -846,7 +846,7 @@ class SettingsWindowController: NSWindowController {
         view.addSubview(nameLabel)
 
         // Version
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.1"
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.2"
         let versionLabel = NSTextField(frame: NSRect(x: 0, y: 215, width: view.bounds.width, height: 20))
         versionLabel.stringValue = "Version \(version)"
         versionLabel.font = NSFont.systemFont(ofSize: 13)

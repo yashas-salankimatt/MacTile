@@ -10,6 +10,8 @@ A macOS window tiling application inspired by [gTile](https://github.com/gTile/g
 - **Mouse Support**: Click and drag to select grid regions, click inside selection to confirm
 - **Multi-Monitor Support**: Switch overlay between monitors with Tab or mouse movement
 - **Dual Global Hotkeys**: Primary (`Control+Option+G`) and secondary (`Command+Return`) shortcuts
+- **Tiling Presets**: Quick keyboard shortcuts to tile windows to predefined positions with cycling support
+- **Focus Presets**: Keyboard shortcuts to quickly focus applications and cycle through their windows
 - **Customizable Appearance**: Configure colors, opacity, and visual elements
 - **Settings Window**: Configure grid sizes, spacing, insets, shortcuts, and behavior
 - **Menu Bar App**: Runs in the menu bar with no dock icon
@@ -63,6 +65,73 @@ MacTile fully supports multi-monitor setups:
 - **Mouse Switching**: When the overlay is open, moving your mouse significantly (50+ pixels) on another monitor will automatically switch the overlay to that monitor
 - **Monitor Indicator**: Shows "Monitor X/Y" in the overlay when multiple monitors are connected (can be disabled in settings)
 
+## Tiling Presets
+
+Tiling presets allow you to quickly tile windows to predefined screen positions using keyboard shortcuts. Configure them in Settings > Presets.
+
+### Features
+
+- **Proportional Positioning**: Define positions as screen proportions (0.0-1.0), so presets work on any screen size
+- **Position Cycling**: Define multiple positions for a single key and cycle through them by pressing repeatedly
+- **Per-Window Cycling**: Cycle state resets when switching to a different window
+- **Configurable Timeout**: Set how long to wait before resetting the cycle (default: 2 seconds)
+- **Modifier Support**: Combine with Control, Option, Shift, or Command modifiers
+- **Auto-Confirm**: Optionally apply the preset immediately without pressing Enter
+
+### Examples
+
+| Preset | Positions | Description |
+|--------|-----------|-------------|
+| `R` | (0.5,0)→(1,1) | Right half of screen |
+| `L` | (0,0)→(0.5,1) | Left half of screen |
+| `R` (cycling) | (0.5,0)→(1,1), (0.67,0)→(1,1), (0.75,0)→(1,1) | Right half → Right third → Right quarter |
+| `⌃1` | (0,0)→(0.5,0.5) | Top-left quarter |
+| `⌃2` | (0.5,0)→(1,0.5) | Top-right quarter |
+
+### How Cycling Works
+
+When you define multiple positions for a preset:
+1. First press: Tiles to position 1
+2. Second press (within timeout): Tiles to position 2
+3. Third press: Tiles to position 3, then wraps to position 1
+4. If you switch windows or wait longer than the timeout, the cycle resets
+
+## Focus Presets
+
+Focus presets allow you to quickly switch to specific applications and cycle through their windows. Configure them in Settings > Focus.
+
+### Features
+
+- **Quick App Switching**: Jump to any application with a single keyboard shortcut
+- **Window Cycling**: If the app is already focused, cycle through all its windows
+- **Multi-Window Support**: Properly cycles through 3 or more windows (not just alternating between 2)
+- **Multi-Monitor Support**: Works with windows spread across multiple monitors
+- **Flexible Activation**: Configure whether presets work globally, in the overlay, or both
+
+### How It Works
+
+1. **App Not Focused**: Pressing the shortcut activates the target application
+2. **App Already Focused**: Pressing again cycles to the next window of that application
+3. **In Overlay**: If configured, the shortcut works while the tiling overlay is open
+
+### Configuration Options
+
+| Option | Description |
+|--------|-------------|
+| **Shortcut** | The keyboard shortcut (with optional modifiers) |
+| **Application** | The target application to focus |
+| **Works Without Overlay** | Enable to use as a global hotkey |
+| **Works With Overlay** | Enable to use while the tiling overlay is open |
+
+### Example Setup
+
+| Shortcut | Application | Use Case |
+|----------|-------------|----------|
+| `⌃⌥T` | Terminal | Quick access to terminal windows |
+| `⌃⌥B` | Browser | Jump to browser and cycle tabs/windows |
+| `⌃⌥S` | Slack | Quick access to Slack |
+| `⌃⌥C` | VS Code | Jump to your editor |
+
 ## Settings
 
 Access Settings from the menu bar icon. You can configure:
@@ -85,6 +154,21 @@ Access Settings from the menu bar icon. You can configure:
 ### Shortcuts
 - **Primary Shortcut**: Main hotkey to toggle the overlay (default: Control+Option+G)
 - **Secondary Shortcut**: Alternative hotkey (default: Command+Return)
+
+### Presets (Tiling)
+- **Add Preset**: Create keyboard shortcuts for quick window tiling
+- **Shortcut**: Record a key combination (with optional modifiers)
+- **Positions**: Define one or more screen positions as proportional coordinates
+- **Add Position**: Add additional positions for cycling behavior
+- **Cycle Timeout**: Time in milliseconds before cycle resets (500-10000ms)
+- **Auto-Confirm**: Apply preset immediately without pressing Enter
+
+### Focus
+- **Add Preset**: Create keyboard shortcuts for app focus switching
+- **Shortcut**: Record a key combination (with optional modifiers)
+- **Application**: Select from running applications or enter bundle ID
+- **Works Without Overlay**: Enable global hotkey functionality
+- **Works With Overlay**: Enable use during tiling overlay
 
 ### Appearance
 - **Overlay Background**: Background color and opacity
@@ -121,15 +205,16 @@ MacTile is built with a clean separation of concerns:
 
 - **MacTileCore**: Core library with grid data structures, operations, and settings
   - `Grid.swift`: GridSize, GridOffset, GridSelection, and GridOperations
-  - `Settings.swift`: MacTileSettings, KeyboardShortcut, AppearanceSettings configuration
+  - `Settings.swift`: MacTileSettings, KeyboardShortcut, TilingPreset, FocusPreset, AppearanceSettings
   - `WindowManagement.swift`: WindowManagerProtocol and WindowTiler
 
 - **MacTile**: Main application
-  - `AppDelegate.swift`: Application lifecycle, menu bar, and hotkey setup
-  - `OverlayWindowController.swift`: Grid overlay UI, keyboard/mouse handling, multi-monitor support
-  - `SettingsWindowController.swift`: Settings window UI
-  - `SettingsManager.swift`: UserDefaults persistence
+  - `AppDelegate.swift`: Application lifecycle, menu bar, global hotkey setup (including focus presets)
+  - `OverlayWindowController.swift`: Grid overlay UI, keyboard/mouse handling, multi-monitor support, tiling presets
+  - `SettingsWindowController.swift`: Settings window UI with tabs for all configuration options
+  - `SettingsManager.swift`: UserDefaults persistence for all settings
   - `WindowManager.swift`: Accessibility API integration for window manipulation
+  - `FocusManager.swift`: Application focus switching and window cycling via Accessibility API
 
 ## Testing
 
