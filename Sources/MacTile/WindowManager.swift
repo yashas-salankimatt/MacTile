@@ -117,7 +117,6 @@ class RealWindowManager: WindowManagerProtocol {
         }
 
         let screenHeight = primaryScreen.frame.height
-        let screenWidth = primaryScreen.frame.width
 
         // Convert from NSScreen coords (bottom-left origin) to AX coords (top-left origin)
         // The conversion uses the primary screen height as the reference
@@ -136,45 +135,112 @@ class RealWindowManager: WindowManagerProtocol {
         let beforeState = readWindowState(realWindow.axWindow)
         print("[WindowManager] BEFORE - Position: \(beforeState.position), Size: \(beforeState.size)")
 
-        // STRATEGY: Move to safe position first, then use unified correction loop
-        // This avoids issues where some apps anchor edges during resize
+        // Detect if this is a cross-monitor move
+        // Convert current AX position to screen coordinates to find current screen
+        let currentWindowCenter = CGPoint(
+            x: beforeState.position.x + beforeState.size.width / 2,
+            y: screenHeight - beforeState.position.y - beforeState.size.height / 2
+        )
+        let targetCenter = CGPoint(
+            x: frame.origin.x + frame.width / 2,
+            y: frame.origin.y + frame.height / 2
+        )
 
-        // Step 1: Move window to left edge to give it room to resize
-        // Only do this if the window is not already near the left edge
-        let needsSafeMove = beforeState.position.x > 100 ||
-                           (beforeState.position.x + beforeState.size.width > screenWidth - 100)
+        let currentScreen = screenContaining(point: currentWindowCenter)
+        let targetScreen = screenContaining(point: targetCenter)
+        let isCrossMonitorMove = currentScreen != targetScreen
 
-        if needsSafeMove {
-            var safePosition = CGPoint(x: 0, y: beforeState.position.y)
-            print("[WindowManager] Step 1: Moving to safe position \(safePosition) first")
-            if let posValue = AXValueCreate(.cgPoint, &safePosition) {
+        if isCrossMonitorMove {
+            print("[WindowManager] Cross-monitor move detected: \(currentScreen?.localizedName ?? "unknown") -> \(targetScreen?.localizedName ?? "unknown")")
+        }
+
+        // STRATEGY depends on whether this is a cross-monitor move
+        // For cross-monitor moves: Shrink first, move, then resize (avoids browser visibility protection)
+        // For same-screen moves: Safe position, resize, then move (handles edge-anchoring apps)
+
+        if isCrossMonitorMove {
+            // CROSS-MONITOR STRATEGY: Shrink window first, then move, then resize to final
+            // Browsers refuse to move large windows "mostly off-screen", but small windows
+            // will move freely. By shrinking first, we ensure the move succeeds.
+
+            print("[WindowManager] Using cross-monitor strategy: shrink, move, then resize")
+
+            // Step 1: Shrink window to a small size that will fit anywhere
+            // Use a size small enough to not trigger visibility protection
+            let smallSize = CGSize(width: 400, height: 300)
+            print("[WindowManager] Step 1: Shrinking to intermediate size \(smallSize)")
+            var size = smallSize
+            if let sizeValue = AXValueCreate(.cgSize, &size) {
+                AXUIElementSetAttributeValue(realWindow.axWindow, kAXSizeAttribute as CFString, sizeValue)
+            }
+            usleep(50000) // 50ms - give window time to shrink
+
+            // Step 2: Move to target position (small window will move freely)
+            print("[WindowManager] Step 2: Moving to target position \(targetPosition)")
+            var position = targetPosition
+            if let posValue = AXValueCreate(.cgPoint, &position) {
                 AXUIElementSetAttributeValue(realWindow.axWindow, kAXPositionAttribute as CFString, posValue)
             }
-            usleep(30000) // 30ms - give window time to move
+            usleep(50000) // 50ms - give window time to move across monitors
+
+            // Step 3: Resize to final size
+            print("[WindowManager] Step 3: Resizing to final size \(targetSize)")
+            size = targetSize
+            if let sizeValue = AXValueCreate(.cgSize, &size) {
+                AXUIElementSetAttributeValue(realWindow.axWindow, kAXSizeAttribute as CFString, sizeValue)
+            }
+            usleep(50000) // 50ms
+
+            // Step 4: Correct position (resize may have shifted it)
+            print("[WindowManager] Step 4: Correcting position to \(targetPosition)")
+            if let posValue = AXValueCreate(.cgPoint, &position) {
+                AXUIElementSetAttributeValue(realWindow.axWindow, kAXPositionAttribute as CFString, posValue)
+            }
+            usleep(30000) // 30ms
+
+        } else {
+            // SAME-SCREEN STRATEGY: Safe position first, then resize, then final position
+            // This handles apps that anchor edges during resize
+
+            print("[WindowManager] Using same-screen strategy: safe position, size, then final position")
+
+            // Step 1: Move window to left edge to give it room to resize
+            // Only do this if the window is not already near the left edge of the target screen
+            let screenLeftEdge = targetScreen?.frame.origin.x ?? 0
+            let needsSafeMove = beforeState.position.x > screenLeftEdge + 100
+
+            if needsSafeMove {
+                var safePosition = CGPoint(x: screenLeftEdge, y: beforeState.position.y)
+                print("[WindowManager] Step 1: Moving to safe position \(safePosition) first")
+                if let posValue = AXValueCreate(.cgPoint, &safePosition) {
+                    AXUIElementSetAttributeValue(realWindow.axWindow, kAXPositionAttribute as CFString, posValue)
+                }
+                usleep(30000) // 30ms - give window time to move
+            }
+
+            // Step 2: Initial size set
+            print("[WindowManager] Step 2: Setting initial size to \(targetSize)")
+            var size = targetSize
+            if let sizeValue = AXValueCreate(.cgSize, &size) {
+                AXUIElementSetAttributeValue(realWindow.axWindow, kAXSizeAttribute as CFString, sizeValue)
+            }
+            usleep(40000) // 40ms
+
+            // Step 3: Set position
+            print("[WindowManager] Step 3: Setting position to \(targetPosition)")
+            var position = targetPosition
+            if let posValue = AXValueCreate(.cgPoint, &position) {
+                AXUIElementSetAttributeValue(realWindow.axWindow, kAXPositionAttribute as CFString, posValue)
+            }
+            usleep(30000) // 30ms
         }
 
-        // Step 2: Initial size set
-        print("[WindowManager] Step 2: Setting initial size to \(targetSize)")
-        var size = targetSize
-        if let sizeValue = AXValueCreate(.cgSize, &size) {
-            AXUIElementSetAttributeValue(realWindow.axWindow, kAXSizeAttribute as CFString, sizeValue)
-        }
-        usleep(40000) // 40ms
-
-        // Step 3: Set position
-        print("[WindowManager] Step 3: Setting position to \(targetPosition)")
-        var position = targetPosition
-        if let posValue = AXValueCreate(.cgPoint, &position) {
-            AXUIElementSetAttributeValue(realWindow.axWindow, kAXPositionAttribute as CFString, posValue)
-        }
-        usleep(30000) // 30ms
-
-        // Step 4: Unified correction loop - some apps link position and size
+        // Unified correction loop - some apps link position and size
         // Setting size can move the window, so we need to correct both together
         // Some apps resize gradually and need multiple attempts
         // Key insight from gTile: they don't use retry logic because GNOME API is synchronous
         // But macOS AX API is asynchronous - we MUST retry until stable for ALL window types
-        print("[WindowManager] Step 4: Unified correction loop")
+        print("[WindowManager] Unified correction loop")
         let maxCorrectionAttempts = 10
         var positionOK = false
         var sizeOK = false
@@ -426,6 +492,31 @@ class RealWindowManager: WindowManagerProtocol {
     }
 
     // MARK: - Private Helpers
+
+    /// Find which screen contains a given point (in NSScreen coordinates)
+    private func screenContaining(point: CGPoint) -> NSScreen? {
+        for screen in NSScreen.screens {
+            if screen.frame.contains(point) {
+                return screen
+            }
+        }
+        // If point is not in any screen (e.g., between monitors), find closest screen
+        var closestScreen: NSScreen?
+        var closestDistance = CGFloat.greatestFiniteMagnitude
+
+        for screen in NSScreen.screens {
+            let screenCenter = CGPoint(
+                x: screen.frame.midX,
+                y: screen.frame.midY
+            )
+            let distance = hypot(point.x - screenCenter.x, point.y - screenCenter.y)
+            if distance < closestDistance {
+                closestDistance = distance
+                closestScreen = screen
+            }
+        }
+        return closestScreen
+    }
 
     private func createWindowInfo(from axWindow: AXUIElement, pid: pid_t) -> RealWindowInfo? {
         // Get window title
