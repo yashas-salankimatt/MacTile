@@ -260,7 +260,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if overlayController?.window?.isVisible == true {
-            overlayController?.hideOverlay()
+            // Toggling off should return focus to the original window (same as Escape)
+            overlayController?.hideOverlay(cancelled: true)
         } else {
             overlayController?.showOverlay()
         }
