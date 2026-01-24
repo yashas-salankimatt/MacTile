@@ -233,33 +233,18 @@ public struct PresetPosition: Codable, Equatable {
         let x2 = max(startX, endX)
         let y2 = max(startY, endY)
 
-        // Calculate the center of the preset area
-        let centerX = (x1 + x2) / 2
-        let centerY = (y1 + y2) / 2
-
-        // Calculate the size in grid units (round down, minimum 1)
+        // Calculate the size in grid units using rounding for accuracy
+        // This ensures that 1/3 of 12 columns = 4, not 3
         let widthProportion = x2 - x1
         let heightProportion = y2 - y1
 
-        let gridWidth = max(1, Int(widthProportion * CGFloat(gridSize.cols)))
-        let gridHeight = max(1, Int(heightProportion * CGFloat(gridSize.rows)))
+        let gridWidth = max(1, Int(round(widthProportion * CGFloat(gridSize.cols))))
+        let gridHeight = max(1, Int(round(heightProportion * CGFloat(gridSize.rows))))
 
-        // Calculate starting position based on center of mass
-        let startCol: Int
-        if centerX < 0.5 {
-            startCol = Int(x1 * CGFloat(gridSize.cols))
-        } else {
-            let endCol = Int(ceil(x2 * CGFloat(gridSize.cols))) - 1
-            startCol = max(0, endCol - gridWidth + 1)
-        }
-
-        let startRow: Int
-        if centerY < 0.5 {
-            startRow = Int(y1 * CGFloat(gridSize.rows))
-        } else {
-            let endRow = Int(ceil(y2 * CGFloat(gridSize.rows))) - 1
-            startRow = max(0, endRow - gridHeight + 1)
-        }
+        // Calculate starting position by rounding the start coordinates
+        // and then clamping to ensure the selection fits within bounds
+        let startCol = Int(round(x1 * CGFloat(gridSize.cols)))
+        let startRow = Int(round(y1 * CGFloat(gridSize.rows)))
 
         // Clamp to grid bounds
         let clampedStartCol = max(0, min(gridSize.cols - gridWidth, startCol))

@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:MacTile}",
+            "name": "Debug MacTile",
+            "target": "MacTile",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug MacTile"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:MacTile}",
+            "name": "Release MacTile",
+            "target": "MacTile",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release MacTile"
+        }
+    ]
+}

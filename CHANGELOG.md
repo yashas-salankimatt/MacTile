@@ -2,6 +2,14 @@
 
 All notable changes to MacTile will be documented in this file.
 
+## [1.0.3] - 2026-01-24
+
+### Fixed
+
+- Tiling presets now correctly calculate grid positions using rounding instead of truncation
+  - Previously, a center third preset (0.34,0)→(0.65,1) on a 12x4 grid would select 3 columns instead of 4
+  - The fix ensures proportional coordinates map accurately to grid cells
+
 ## [1.0.2] - 2026-01-24
 
 ### Added

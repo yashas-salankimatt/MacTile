@@ -78,7 +78,7 @@ To create a DMG disk image for easy distribution:
 This will:
 1. Build MacTile.app if not already built
 2. Create a DMG containing the app and an Applications shortcut
-3. The DMG will be at: `build/MacTile-1.0.2.dmg`
+3. The DMG will be at: `build/MacTile-1.0.3.dmg`
 
 Recipients can open the DMG and drag MacTile to Applications to install.
 
