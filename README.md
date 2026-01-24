@@ -104,15 +104,17 @@ Focus presets allow you to quickly switch to specific applications and cycle thr
 
 - **Quick App Switching**: Jump to any application with a single keyboard shortcut
 - **Window Cycling**: If the app is already focused, cycle through all its windows
+- **Open If Not Running**: Optionally launch the target app if it's not already running
 - **Multi-Window Support**: Properly cycles through 3 or more windows (not just alternating between 2)
 - **Multi-Monitor Support**: Works with windows spread across multiple monitors
 - **Flexible Activation**: Configure whether presets work globally, in the overlay, or both
 
 ### How It Works
 
-1. **App Not Focused**: Pressing the shortcut activates the target application
-2. **App Already Focused**: Pressing again cycles to the next window of that application
-3. **In Overlay**: If configured, the shortcut works while the tiling overlay is open
+1. **App Not Running**: If "Open" is enabled, the app is launched
+2. **App Not Focused**: Pressing the shortcut activates the target application
+3. **App Already Focused**: Pressing again cycles to the next window of that application
+4. **In Overlay**: If configured, the shortcut works while the tiling overlay is open
 
 ### Configuration Options
 
@@ -120,8 +122,9 @@ Focus presets allow you to quickly switch to specific applications and cycle thr
 |--------|-------------|
 | **Shortcut** | The keyboard shortcut (with optional modifiers) |
 | **Application** | The target application to focus |
-| **Works Without Overlay** | Enable to use as a global hotkey |
-| **Works With Overlay** | Enable to use while the tiling overlay is open |
+| **Global** | Enable to use as a global hotkey (works without overlay) |
+| **Overlay** | Enable to use while the tiling overlay is open |
+| **Open** | Launch the app if it's not already running |
 
 ### Example Setup
 
@@ -166,9 +169,10 @@ Access Settings from the menu bar icon. You can configure:
 ### Focus
 - **Add Preset**: Create keyboard shortcuts for app focus switching
 - **Shortcut**: Record a key combination (with optional modifiers)
-- **Application**: Select from running applications or enter bundle ID
-- **Works Without Overlay**: Enable global hotkey functionality
-- **Works With Overlay**: Enable use during tiling overlay
+- **Application**: Select from running applications (list refreshes on click)
+- **Global**: Enable global hotkey functionality (works without overlay)
+- **Overlay**: Enable use during tiling overlay
+- **Open**: Launch the application if it's not already running
 
 ### Appearance
 - **Overlay Background**: Background color and opacity
