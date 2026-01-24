@@ -59,14 +59,20 @@ class FocusManager {
     ///   - forceCycle: If true, skip the frontmost check and always cycle windows.
     ///                 Use this when calling from overlay where the app appears not-frontmost
     ///                 but was actually focused before the overlay appeared.
+    ///   - openIfNotRunning: If true and the app is not running, launch it.
     /// Returns true if successful
     @discardableResult
-    func focusNextWindow(forBundleID bundleID: String, forceCycle: Bool = false) -> Bool {
+    func focusNextWindow(forBundleID bundleID: String, forceCycle: Bool = false, openIfNotRunning: Bool = false) -> Bool {
         // Find running app
         guard let app = NSWorkspace.shared.runningApplications.first(where: {
             $0.bundleIdentifier == bundleID && $0.activationPolicy == .regular
         }) else {
             print("[FocusManager] No running app found for bundle ID: \(bundleID)")
+
+            // If openIfNotRunning is enabled, try to launch the app
+            if openIfNotRunning {
+                return launchApp(bundleID: bundleID)
+            }
             return false
         }
 
@@ -134,5 +140,30 @@ class FocusManager {
                 return (bundleID: bundleID, name: app.localizedName ?? bundleID)
             }
             .sorted { $0.name.lowercased() < $1.name.lowercased() }
+    }
+
+    /// Launch an application by its bundle ID
+    /// Returns true if the launch was initiated successfully
+    @discardableResult
+    private func launchApp(bundleID: String) -> Bool {
+        guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            print("[FocusManager] Could not find app URL for bundle ID: \(bundleID)")
+            return false
+        }
+
+        print("[FocusManager] Launching app: \(bundleID)")
+
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+
+        NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { app, error in
+            if let error = error {
+                print("[FocusManager] Failed to launch app: \(error.localizedDescription)")
+            } else if let app = app {
+                print("[FocusManager] Successfully launched: \(app.localizedName ?? bundleID)")
+            }
+        }
+
+        return true
     }
 }

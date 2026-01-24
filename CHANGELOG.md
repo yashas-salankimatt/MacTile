@@ -2,6 +2,24 @@
 
 All notable changes to MacTile will be documented in this file.
 
+## [1.0.4] - 2026-01-24
+
+### Added
+
+- **Open If Not Running**: Focus presets can now optionally launch the target app if it's not already running
+  - New "Open" checkbox in Focus Presets settings for each preset
+  - When enabled, using the focus shortcut will launch the app if no instance is running
+
+### Fixed
+
+- **Cross-Monitor Window Movement**: Fixed windows getting stuck between monitors when tiling
+  - Windows now properly move across monitor boundaries using a shrink-move-resize strategy
+  - Resolves issue where large windows would get trapped at monitor edges
+
+- **Focus Presets App Dropdown**: Application list now refreshes when clicking the dropdown
+  - Previously, apps opened after MacTile wouldn't appear in the list
+  - The dropdown now shows all currently running applications in real-time
+
 ## [1.0.3] - 2026-01-24
 
 ### Fixed

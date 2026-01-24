@@ -728,6 +728,10 @@ class SettingsWindowController: NSWindowController {
         let overlayLabel = createLabel("Overlay", frame: NSRect(x: headerOffset + 400, y: y, width: 50, height: 16))
         overlayLabel.font = NSFont.boldSystemFont(ofSize: 11)
         view.addSubview(overlayLabel)
+
+        let openLabel = createLabel("Open", frame: NSRect(x: headerOffset + 455, y: y, width: 40, height: 16))
+        openLabel.font = NSFont.boldSystemFont(ofSize: 11)
+        view.addSubview(openLabel)
         y -= 18
 
         // Scroll view for focus presets
@@ -846,7 +850,7 @@ class SettingsWindowController: NSWindowController {
         view.addSubview(nameLabel)
 
         // Version
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.3"
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.4"
         let versionLabel = NSTextField(frame: NSRect(x: 0, y: 215, width: view.bounds.width, height: 20))
         versionLabel.stringValue = "Version \(version)"
         versionLabel.font = NSFont.systemFont(ofSize: 13)
@@ -1743,11 +1747,12 @@ class PresetRowView: NSView {
 // MARK: - FocusPresetRowView
 
 /// A row view for editing a single focus preset
-class FocusPresetRowView: NSView {
+class FocusPresetRowView: NSView, NSMenuDelegate {
     private var recordButton: NSButton!
     private var appPopup: NSPopUpButton!
     private var globalCheckbox: NSButton!
     private var overlayCheckbox: NSButton!
+    private var openCheckbox: NSButton!
     private var deleteButton: NSButton!
 
     private var isRecording = false
@@ -1818,6 +1823,7 @@ class FocusPresetRowView: NSView {
         appPopup.target = self
         appPopup.action = #selector(appSelected)
         populateAppPopup()
+        appPopup.menu?.delegate = self
         addSubview(appPopup)
         x += 225
 
@@ -1831,7 +1837,13 @@ class FocusPresetRowView: NSView {
         overlayCheckbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(overlayChanged))
         overlayCheckbox.frame = NSRect(x: x, y: y, width: 22, height: 22)
         addSubview(overlayCheckbox)
-        x += 45
+        x += 50
+
+        // Open checkbox (open if not running)
+        openCheckbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(openChanged))
+        openCheckbox.frame = NSRect(x: x, y: y, width: 22, height: 22)
+        addSubview(openCheckbox)
+        x += 40
 
         // Delete button
         deleteButton = NSButton(frame: NSRect(x: x, y: y, width: 65, height: 22))
@@ -1852,6 +1864,40 @@ class FocusPresetRowView: NSView {
             let item = NSMenuItem(title: app.name, action: nil, keyEquivalent: "")
             item.representedObject = app.bundleID
             appPopup.menu?.addItem(item)
+        }
+    }
+
+    // MARK: - NSMenuDelegate
+
+    func menuWillOpen(_ menu: NSMenu) {
+        guard menu === appPopup.menu else { return }
+
+        // Remember current selection
+        let currentBundleID = preset.appBundleID
+        let currentAppName = preset.appName
+
+        // Refresh the list with current running apps
+        populateAppPopup()
+
+        // Restore selection
+        if !currentBundleID.isEmpty {
+            var found = false
+            for i in 0..<appPopup.numberOfItems {
+                if let item = appPopup.item(at: i),
+                   let bundleID = item.representedObject as? String,
+                   bundleID == currentBundleID {
+                    appPopup.selectItem(at: i)
+                    found = true
+                    break
+                }
+            }
+            // If app not in running list, add it manually
+            if !found && !currentAppName.isEmpty {
+                let item = NSMenuItem(title: currentAppName, action: nil, keyEquivalent: "")
+                item.representedObject = currentBundleID
+                appPopup.menu?.addItem(item)
+                appPopup.select(item)
+            }
         }
     }
 
@@ -1890,6 +1936,7 @@ class FocusPresetRowView: NSView {
         // Update checkboxes
         globalCheckbox.state = preset.worksWithoutOverlay ? .on : .off
         overlayCheckbox.state = preset.worksWithOverlay ? .on : .off
+        openCheckbox.state = preset.openIfNotRunning ? .on : .off
     }
 
     @objc private func toggleRecord() {
@@ -1934,7 +1981,8 @@ class FocusPresetRowView: NSView {
                     appBundleID: self.preset.appBundleID,
                     appName: self.preset.appName,
                     worksWithoutOverlay: self.preset.worksWithoutOverlay,
-                    worksWithOverlay: self.preset.worksWithOverlay
+                    worksWithOverlay: self.preset.worksWithOverlay,
+                    openIfNotRunning: self.preset.openIfNotRunning
                 )
 
                 self.isRecording = false
@@ -1964,7 +2012,8 @@ class FocusPresetRowView: NSView {
                 appBundleID: bundleID,
                 appName: selectedItem.title,
                 worksWithoutOverlay: preset.worksWithoutOverlay,
-                worksWithOverlay: preset.worksWithOverlay
+                worksWithOverlay: preset.worksWithOverlay,
+                openIfNotRunning: preset.openIfNotRunning
             )
         }
     }
@@ -1977,7 +2026,8 @@ class FocusPresetRowView: NSView {
             appBundleID: preset.appBundleID,
             appName: preset.appName,
             worksWithoutOverlay: globalCheckbox.state == .on,
-            worksWithOverlay: preset.worksWithOverlay
+            worksWithOverlay: preset.worksWithOverlay,
+            openIfNotRunning: preset.openIfNotRunning
         )
     }
 
@@ -1989,7 +2039,21 @@ class FocusPresetRowView: NSView {
             appBundleID: preset.appBundleID,
             appName: preset.appName,
             worksWithoutOverlay: preset.worksWithoutOverlay,
-            worksWithOverlay: overlayCheckbox.state == .on
+            worksWithOverlay: overlayCheckbox.state == .on,
+            openIfNotRunning: preset.openIfNotRunning
+        )
+    }
+
+    @objc private func openChanged() {
+        preset = FocusPreset(
+            keyCode: preset.keyCode,
+            keyString: preset.keyString,
+            modifiers: preset.modifiers,
+            appBundleID: preset.appBundleID,
+            appName: preset.appName,
+            worksWithoutOverlay: preset.worksWithoutOverlay,
+            worksWithOverlay: preset.worksWithOverlay,
+            openIfNotRunning: openCheckbox.state == .on
         )
     }
 

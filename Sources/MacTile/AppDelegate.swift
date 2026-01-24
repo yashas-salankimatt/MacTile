@@ -255,20 +255,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if let key = keyCodeToHotKey(preset.keyCode) {
                 let bundleID = preset.appBundleID  // Capture for closure
                 let worksWithOverlay = preset.worksWithOverlay  // Capture for closure
+                let openIfNotRunning = preset.openIfNotRunning  // Capture for closure
                 let hk = HotKey(key: key, modifiers: modifiers)
                 hk.keyDownHandler = { [weak self] in
                     // If overlay is visible, delegate to overlay's handler (if preset supports it)
                     if self?.overlayController?.window?.isVisible == true {
                         if worksWithOverlay {
                             print("[FocusHotKey] Overlay visible, delegating to overlay for \(bundleID)")
-                            self?.overlayController?.activateFocusPreset(bundleID: bundleID)
+                            self?.overlayController?.activateFocusPreset(bundleID: bundleID, openIfNotRunning: openIfNotRunning)
                         } else {
                             print("[FocusHotKey] Skipping - overlay visible but preset doesn't support overlay")
                         }
                         return
                     }
                     print("[FocusHotKey] Activated for \(bundleID)")
-                    FocusManager.shared.focusNextWindow(forBundleID: bundleID)
+                    FocusManager.shared.focusNextWindow(forBundleID: bundleID, openIfNotRunning: openIfNotRunning)
                 }
                 focusHotKeys.append(hk)
                 print("Registered focus hotkey: \(preset.shortcutDisplayString) -> \(preset.appName)")

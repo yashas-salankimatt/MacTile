@@ -517,7 +517,7 @@ class OverlayWindowController: NSWindowController {
     }
 
     /// Activate a focus preset - hide overlay and focus the target app
-    func activateFocusPreset(bundleID: String) {
+    func activateFocusPreset(bundleID: String, openIfNotRunning: Bool = false) {
         // Check if the window that was focused BEFORE the overlay belongs to the target app
         // If so, we should force cycling since user was already viewing that app
         var shouldForceCycle = false
@@ -534,7 +534,7 @@ class OverlayWindowController: NSWindowController {
         hideOverlay(cancelled: false)
 
         // Focus the target app (with force cycle if we were already on that app)
-        FocusManager.shared.focusNextWindow(forBundleID: bundleID, forceCycle: shouldForceCycle)
+        FocusManager.shared.focusNextWindow(forBundleID: bundleID, forceCycle: shouldForceCycle, openIfNotRunning: openIfNotRunning)
     }
 }
 

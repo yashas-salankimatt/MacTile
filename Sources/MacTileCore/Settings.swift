@@ -400,6 +400,8 @@ public struct FocusPreset: Codable, Equatable {
     public var worksWithoutOverlay: Bool
     /// If true, this hotkey works when the overlay is active
     public var worksWithOverlay: Bool
+    /// If true, launch the app if it's not already running
+    public var openIfNotRunning: Bool
 
     public init(
         keyCode: UInt16,
@@ -408,7 +410,8 @@ public struct FocusPreset: Codable, Equatable {
         appBundleID: String,
         appName: String,
         worksWithoutOverlay: Bool = true,
-        worksWithOverlay: Bool = true
+        worksWithOverlay: Bool = true,
+        openIfNotRunning: Bool = false
     ) {
         self.keyCode = keyCode
         self.keyString = keyString
@@ -417,6 +420,7 @@ public struct FocusPreset: Codable, Equatable {
         self.appName = appName
         self.worksWithoutOverlay = worksWithoutOverlay
         self.worksWithOverlay = worksWithOverlay
+        self.openIfNotRunning = openIfNotRunning
     }
 
     /// Display string for the key combination (e.g., "⌃⌥T")
