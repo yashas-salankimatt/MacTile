@@ -244,6 +244,9 @@ class OverlayWindowController: NSWindowController {
             // Update monitor info in grid view
             gridView.currentMonitorIndex = currentMonitorIndex
             gridView.totalMonitors = monitorCount
+
+            // Pass target window ID for per-window preset cycling
+            gridView.targetWindowID = targetWindow?.identifier
         }
 
         // Set initial selection to match window position
@@ -583,6 +586,16 @@ class GridOverlayView: NSView {
     var gridPresets: [GridSize]
     var keyboardSettings: OverlayKeyboardSettings
     var tilingPresets: [TilingPreset] = []
+
+    // Target window identifier (set by OverlayWindowController)
+    var targetWindowID: UInt32?
+
+    // Preset cycling state - now tracks per-window
+    private var lastActivatedPresetIndex: Int?
+    private var lastActivatedWindowID: UInt32?
+    private var lastPresetActivationTime: Date?
+    private var currentCycleIndex: Int = 0
+
     var appearanceSettings: AppearanceSettings {
         didSet {
             needsDisplay = true
@@ -774,43 +787,62 @@ class GridOverlayView: NSView {
             return
         }
 
-        // Check for tiling presets first (only without modifiers to avoid conflicts)
+        // Convert event modifiers to our modifier flags
         let modifiers = event.modifierFlags
-        let hasModifiers = modifiers.contains(.shift) || modifiers.contains(.option) ||
-                          modifiers.contains(.control) || modifiers.contains(.command)
+        var eventModifiers: UInt = KeyboardShortcut.Modifiers.none
+        if modifiers.contains(.control) {
+            eventModifiers |= KeyboardShortcut.Modifiers.control
+        }
+        if modifiers.contains(.option) {
+            eventModifiers |= KeyboardShortcut.Modifiers.option
+        }
+        if modifiers.contains(.shift) {
+            eventModifiers |= KeyboardShortcut.Modifiers.shift
+        }
+        if modifiers.contains(.command) {
+            eventModifiers |= KeyboardShortcut.Modifiers.command
+        }
 
-        if !hasModifiers {
-            for preset in tilingPresets {
-                if event.keyCode == preset.keyCode {
-                    print("Preset matched: \(preset.keyString) -> \(preset.coordinateString)")
-                    let presetSelection = preset.toGridSelection(gridSize: gridSize)
-                    selection = presetSelection
+        // Check for tiling presets (now supports modifiers)
+        for (presetIndex, preset) in tilingPresets.enumerated() {
+            if preset.matches(keyCode: event.keyCode, modifiers: eventModifiers) {
+                let now = Date()
 
-                    if preset.autoConfirm {
-                        print("Auto-confirming preset")
-                        onSelectionConfirmed?(presetSelection)
+                // Determine cycle position - only cycle if same preset AND same window
+                var cycleIndex = 0
+                if let lastIndex = lastActivatedPresetIndex,
+                   let lastWindowID = lastActivatedWindowID,
+                   let lastTime = lastPresetActivationTime,
+                   lastIndex == presetIndex,
+                   lastWindowID == targetWindowID {
+                    // Same preset AND same window - check if within timeout
+                    let elapsed = now.timeIntervalSince(lastTime) * 1000 // Convert to ms
+                    if elapsed < Double(preset.cycleTimeout) {
+                        // Advance to next cycle position
+                        cycleIndex = (currentCycleIndex + 1) % preset.cycleCount
                     }
-                    return
                 }
+
+                // Update tracking state (including window ID)
+                lastActivatedPresetIndex = presetIndex
+                lastActivatedWindowID = targetWindowID
+                lastPresetActivationTime = now
+                currentCycleIndex = cycleIndex
+
+                let windowName = targetWindowID.map { "window \($0)" } ?? "unknown window"
+                print("Preset matched: \(preset.shortcutDisplayString) -> position \(cycleIndex + 1)/\(preset.cycleCount) for \(windowName): \(preset.positions[cycleIndex].coordinateString)")
+                let presetSelection = preset.toGridSelection(gridSize: gridSize, positionIndex: cycleIndex)
+                selection = presetSelection
+
+                if preset.autoConfirm {
+                    print("Auto-confirming preset")
+                    onSelectionConfirmed?(presetSelection)
+                }
+                return
             }
         }
 
-        // Get current modifier state
-        var currentModifier: UInt = KeyboardShortcut.Modifiers.none
-        if modifiers.contains(.shift) {
-            currentModifier |= KeyboardShortcut.Modifiers.shift
-        }
-        if modifiers.contains(.option) {
-            currentModifier |= KeyboardShortcut.Modifiers.option
-        }
-        if modifiers.contains(.control) {
-            currentModifier |= KeyboardShortcut.Modifiers.control
-        }
-        if modifiers.contains(.command) {
-            currentModifier |= KeyboardShortcut.Modifiers.command
-        }
-
-        // Determine mode based on modifier
+        // Determine mode based on modifier (reuse eventModifiers computed above)
         enum SelectionMode {
             case pan       // Move entire selection
             case anchor    // Move first corner
@@ -818,11 +850,11 @@ class GridOverlayView: NSView {
         }
 
         let mode: SelectionMode
-        if currentModifier == keyboardSettings.panModifier {
+        if eventModifiers == keyboardSettings.panModifier {
             mode = .pan
-        } else if currentModifier == keyboardSettings.anchorModifier {
+        } else if eventModifiers == keyboardSettings.anchorModifier {
             mode = .anchor
-        } else if currentModifier == keyboardSettings.targetModifier {
+        } else if eventModifiers == keyboardSettings.targetModifier {
             mode = .target
         } else {
             // Unknown modifier combination, default to pan

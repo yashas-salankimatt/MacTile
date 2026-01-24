@@ -200,15 +200,10 @@ public struct OverlayKeyboardSettings: Equatable, Codable {
     }
 }
 
-// MARK: - Tiling Preset
+// MARK: - Preset Position
 
-/// A keyboard shortcut that tiles to a proportional screen region
-public struct TilingPreset: Codable, Equatable {
-    /// The key code for this preset
-    public var keyCode: UInt16
-    /// Human-readable key name (e.g., "R", "1")
-    public var keyString: String
-
+/// A single position configuration for a tiling preset
+public struct PresetPosition: Codable, Equatable {
     /// Start X coordinate as proportion (0.0 to 1.0, where 0 = left edge)
     public var startX: CGFloat
     /// Start Y coordinate as proportion (0.0 to 1.0, where 0 = top edge)
@@ -218,25 +213,11 @@ public struct TilingPreset: Codable, Equatable {
     /// End Y coordinate as proportion (0.0 to 1.0, where 1 = bottom edge)
     public var endY: CGFloat
 
-    /// If true, immediately apply the selection; if false, just select the area
-    public var autoConfirm: Bool
-
-    public init(
-        keyCode: UInt16,
-        keyString: String,
-        startX: CGFloat,
-        startY: CGFloat,
-        endX: CGFloat,
-        endY: CGFloat,
-        autoConfirm: Bool
-    ) {
-        self.keyCode = keyCode
-        self.keyString = keyString
+    public init(startX: CGFloat, startY: CGFloat, endX: CGFloat, endY: CGFloat) {
         self.startX = max(0, min(1, startX))
         self.startY = max(0, min(1, startY))
         self.endX = max(0, min(1, endX))
         self.endY = max(0, min(1, endY))
-        self.autoConfirm = autoConfirm
     }
 
     /// Display string for the coordinates
@@ -244,34 +225,7 @@ public struct TilingPreset: Codable, Equatable {
         return String(format: "(%.2f,%.2f);(%.2f,%.2f)", startX, startY, endX, endY)
     }
 
-    /// Parse coordinates from string format "(x1,y1);(x2,y2)"
-    public static func parseCoordinates(_ string: String) -> (startX: CGFloat, startY: CGFloat, endX: CGFloat, endY: CGFloat)? {
-        // Remove whitespace and parentheses
-        let cleaned = string.replacingOccurrences(of: " ", with: "")
-            .replacingOccurrences(of: "(", with: "")
-            .replacingOccurrences(of: ")", with: "")
-
-        let parts = cleaned.split(separator: ";")
-        guard parts.count == 2 else { return nil }
-
-        let start = parts[0].split(separator: ",")
-        let end = parts[1].split(separator: ",")
-
-        guard start.count == 2, end.count == 2,
-              let x1 = Double(start[0]), let y1 = Double(start[1]),
-              let x2 = Double(end[0]), let y2 = Double(end[1]) else {
-            return nil
-        }
-
-        return (CGFloat(x1), CGFloat(y1), CGFloat(x2), CGFloat(y2))
-    }
-
     /// Convert proportional coordinates to a grid selection
-    /// - Sizes are rounded down
-    /// - Position is determined by center of mass:
-    ///   - If center is on left half, align to left
-    ///   - If center is on right half, align to right
-    ///   - Same logic for top/bottom
     public func toGridSelection(gridSize: GridSize) -> GridSelection {
         // Normalize so start <= end
         let x1 = min(startX, endX)
@@ -293,20 +247,16 @@ public struct TilingPreset: Codable, Equatable {
         // Calculate starting position based on center of mass
         let startCol: Int
         if centerX < 0.5 {
-            // Left side - start from the proportional position, round down
             startCol = Int(x1 * CGFloat(gridSize.cols))
         } else {
-            // Right side - align so selection ends at the right edge of the proportional area
             let endCol = Int(ceil(x2 * CGFloat(gridSize.cols))) - 1
             startCol = max(0, endCol - gridWidth + 1)
         }
 
         let startRow: Int
         if centerY < 0.5 {
-            // Top side - start from the proportional position, round down
             startRow = Int(y1 * CGFloat(gridSize.rows))
         } else {
-            // Bottom side - align so selection ends at the bottom edge
             let endRow = Int(ceil(y2 * CGFloat(gridSize.rows))) - 1
             startRow = max(0, endRow - gridHeight + 1)
         }
@@ -323,23 +273,126 @@ public struct TilingPreset: Codable, Equatable {
             target: GridOffset(col: endCol, row: endRow)
         )
     }
+}
 
-    /// Common presets
-    public static let leftHalf = TilingPreset(
-        keyCode: 0, keyString: "", startX: 0, startY: 0, endX: 0.5, endY: 1, autoConfirm: true
-    )
-    public static let rightHalf = TilingPreset(
-        keyCode: 0, keyString: "", startX: 0.5, startY: 0, endX: 1, endY: 1, autoConfirm: true
-    )
-    public static let topHalf = TilingPreset(
-        keyCode: 0, keyString: "", startX: 0, startY: 0, endX: 1, endY: 0.5, autoConfirm: true
-    )
-    public static let bottomHalf = TilingPreset(
-        keyCode: 0, keyString: "", startX: 0, startY: 0.5, endX: 1, endY: 1, autoConfirm: true
-    )
-    public static let fullScreen = TilingPreset(
-        keyCode: 0, keyString: "", startX: 0, startY: 0, endX: 1, endY: 1, autoConfirm: true
-    )
+// MARK: - Tiling Preset
+
+/// A keyboard shortcut that tiles to proportional screen regions with cycling support
+public struct TilingPreset: Codable, Equatable {
+    /// The key code for this preset
+    public var keyCode: UInt16
+    /// Human-readable key name (e.g., "R", "1")
+    public var keyString: String
+    /// Modifier flags (control, option, shift, command)
+    public var modifiers: UInt
+
+    /// Array of positions to cycle through
+    public var positions: [PresetPosition]
+
+    /// If true, immediately apply the selection; if false, just select the area
+    public var autoConfirm: Bool
+
+    /// Timeout in milliseconds to wait for next keypress before resetting cycle
+    public var cycleTimeout: Int
+
+    public init(
+        keyCode: UInt16,
+        keyString: String,
+        modifiers: UInt = KeyboardShortcut.Modifiers.none,
+        positions: [PresetPosition],
+        autoConfirm: Bool,
+        cycleTimeout: Int = 2000
+    ) {
+        self.keyCode = keyCode
+        self.keyString = keyString
+        self.modifiers = modifiers
+        self.positions = positions.isEmpty ? [PresetPosition(startX: 0, startY: 0, endX: 0.5, endY: 1)] : positions
+        self.autoConfirm = autoConfirm
+        self.cycleTimeout = max(500, min(10000, cycleTimeout))
+    }
+
+    /// Convenience initializer for single position (backwards compatibility)
+    public init(
+        keyCode: UInt16,
+        keyString: String,
+        modifiers: UInt = KeyboardShortcut.Modifiers.none,
+        startX: CGFloat,
+        startY: CGFloat,
+        endX: CGFloat,
+        endY: CGFloat,
+        autoConfirm: Bool,
+        cycleTimeout: Int = 2000
+    ) {
+        self.init(
+            keyCode: keyCode,
+            keyString: keyString,
+            modifiers: modifiers,
+            positions: [PresetPosition(startX: startX, startY: startY, endX: endX, endY: endY)],
+            autoConfirm: autoConfirm,
+            cycleTimeout: cycleTimeout
+        )
+    }
+
+    /// Display string for the key combination (e.g., "⌃⌥R")
+    public var shortcutDisplayString: String {
+        var parts: [String] = []
+        if modifiers & KeyboardShortcut.Modifiers.control != 0 { parts.append("⌃") }
+        if modifiers & KeyboardShortcut.Modifiers.option != 0 { parts.append("⌥") }
+        if modifiers & KeyboardShortcut.Modifiers.shift != 0 { parts.append("⇧") }
+        if modifiers & KeyboardShortcut.Modifiers.command != 0 { parts.append("⌘") }
+        parts.append(keyString)
+        return parts.joined()
+    }
+
+    /// Display string for all positions (separated by " | ")
+    public var coordinateString: String {
+        return positions.map { $0.coordinateString }.joined(separator: " | ")
+    }
+
+    /// Parse multiple positions from string format "(x1,y1);(x2,y2) | (x1,y1);(x2,y2) | ..."
+    public static func parsePositions(_ string: String) -> [PresetPosition] {
+        let positionStrings = string.split(separator: "|").map { String($0).trimmingCharacters(in: .whitespaces) }
+        return positionStrings.compactMap { parseCoordinates($0) }.map {
+            PresetPosition(startX: $0.startX, startY: $0.startY, endX: $0.endX, endY: $0.endY)
+        }
+    }
+
+    /// Parse coordinates from string format "(x1,y1);(x2,y2)"
+    public static func parseCoordinates(_ string: String) -> (startX: CGFloat, startY: CGFloat, endX: CGFloat, endY: CGFloat)? {
+        let cleaned = string.replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "(", with: "")
+            .replacingOccurrences(of: ")", with: "")
+
+        let parts = cleaned.split(separator: ";")
+        guard parts.count == 2 else { return nil }
+
+        let start = parts[0].split(separator: ",")
+        let end = parts[1].split(separator: ",")
+
+        guard start.count == 2, end.count == 2,
+              let x1 = Double(start[0]), let y1 = Double(start[1]),
+              let x2 = Double(end[0]), let y2 = Double(end[1]) else {
+            return nil
+        }
+
+        return (CGFloat(x1), CGFloat(y1), CGFloat(x2), CGFloat(y2))
+    }
+
+    /// Get grid selection for a specific position index
+    public func toGridSelection(gridSize: GridSize, positionIndex: Int = 0) -> GridSelection {
+        let index = max(0, min(positions.count - 1, positionIndex))
+        return positions[index].toGridSelection(gridSize: gridSize)
+    }
+
+    /// Number of cycle positions
+    public var cycleCount: Int {
+        return positions.count
+    }
+
+    /// Check if this preset matches the given key event
+    public func matches(keyCode: UInt16, modifiers: UInt) -> Bool {
+        return self.keyCode == keyCode && self.modifiers == modifiers
+    }
 }
 
 // MARK: - MacTile Settings
@@ -398,7 +451,7 @@ public struct MacTileSettings: Codable, Equatable {
     /// Overlay keyboard configuration
     public var overlayKeyboard: OverlayKeyboardSettings
 
-    /// Quick tiling presets (0-10 presets)
+    /// Quick tiling presets (0-30 presets)
     public var tilingPresets: [TilingPreset]
 
     // MARK: - Appearance
@@ -461,8 +514,8 @@ public struct MacTileSettings: Codable, Equatable {
         self.toggleOverlayShortcut = toggleOverlayShortcut
         self.secondaryToggleOverlayShortcut = secondaryToggleOverlayShortcut
         self.overlayKeyboard = overlayKeyboard
-        // Limit to 10 presets
-        self.tilingPresets = Array(tilingPresets.prefix(10))
+        // Limit to 30 presets
+        self.tilingPresets = Array(tilingPresets.prefix(30))
         self.appearance = appearance
     }
 }

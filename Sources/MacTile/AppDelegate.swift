@@ -179,11 +179,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupHotKey() {
         let settings = SettingsManager.shared.settings
 
+        // Clear existing hotkeys first
+        hotKey = nil
+        secondaryHotKey = nil
+
         // Setup primary hotkey
         let shortcut = settings.toggleOverlayShortcut
+        print("Setting up primary hotkey: keyCode=\(shortcut.keyCode), modifiers=\(shortcut.modifiers), display=\(shortcut.displayString)")
         hotKey = createHotKey(from: shortcut)
         if hotKey != nil {
-            print("Registered primary hotkey: \(shortcut.displayString)")
+            print("Successfully registered primary hotkey: \(shortcut.displayString)")
         } else {
             print("Failed to register primary hotkey - unknown key code: \(shortcut.keyCode)")
             // Fall back to default
@@ -191,13 +196,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             hotKey?.keyDownHandler = { [weak self] in
                 self?.toggleGrid()
             }
+            print("Fell back to default hotkey: ⌃⌥G")
         }
 
         // Setup secondary hotkey (optional)
         if let secondaryShortcut = settings.secondaryToggleOverlayShortcut {
+            print("Setting up secondary hotkey: keyCode=\(secondaryShortcut.keyCode), modifiers=\(secondaryShortcut.modifiers), display=\(secondaryShortcut.displayString)")
             secondaryHotKey = createHotKey(from: secondaryShortcut)
             if secondaryHotKey != nil {
-                print("Registered secondary hotkey: \(secondaryShortcut.displayString)")
+                print("Successfully registered secondary hotkey: \(secondaryShortcut.displayString)")
             } else {
                 print("Failed to register secondary hotkey - unknown key code: \(secondaryShortcut.keyCode)")
             }

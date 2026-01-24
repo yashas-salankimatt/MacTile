@@ -26,6 +26,7 @@ class SettingsWindowController: NSWindowController {
     private var shortcutRecordButton: NSButton!
     private var isRecordingShortcut = false
     private var recordedShortcut: KeyboardShortcut?
+    private var shortcutMonitor: Any?  // Store event monitor to remove it later
 
     // Shortcuts tab - Secondary
     private var secondaryShortcutField: NSTextField!
@@ -34,6 +35,7 @@ class SettingsWindowController: NSWindowController {
     private var isRecordingSecondaryShortcut = false
     private var recordedSecondaryShortcut: KeyboardShortcut?
     private var hasSecondaryShortcut = true
+    private var secondaryShortcutMonitor: Any?  // Store event monitor to remove it later
 
     private var panModifierPopup: NSPopUpButton!
     private var anchorModifierPopup: NSPopUpButton!
@@ -68,7 +70,7 @@ class SettingsWindowController: NSWindowController {
 
     convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 580, height: 580),
+            contentRect: NSRect(x: 0, y: 0, width: 660, height: 580),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -82,11 +84,46 @@ class SettingsWindowController: NSWindowController {
         loadCurrentSettings()
     }
 
+    override func showWindow(_ sender: Any?) {
+        setupMainMenu()
+        super.showWindow(sender)
+    }
+
+    /// Sets up the main application menu with Edit menu for copy/paste support
+    private func setupMainMenu() {
+        // Only set up if not already present
+        if NSApp.mainMenu == nil {
+            let mainMenu = NSMenu()
+
+            // Application menu (required)
+            let appMenuItem = NSMenuItem()
+            let appMenu = NSMenu()
+            appMenu.addItem(NSMenuItem(title: "Quit MacTile", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+            appMenuItem.submenu = appMenu
+            mainMenu.addItem(appMenuItem)
+
+            // Edit menu for copy/paste
+            let editMenuItem = NSMenuItem()
+            let editMenu = NSMenu(title: "Edit")
+            editMenu.addItem(NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "z"))
+            editMenu.addItem(NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "Z"))
+            editMenu.addItem(NSMenuItem.separator())
+            editMenu.addItem(NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x"))
+            editMenu.addItem(NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
+            editMenu.addItem(NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
+            editMenu.addItem(NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
+            editMenuItem.submenu = editMenu
+            mainMenu.addItem(editMenuItem)
+
+            NSApp.mainMenu = mainMenu
+        }
+    }
+
     private func setupUI() {
         guard let window = window else { return }
 
         // Create tab view
-        tabView = NSTabView(frame: NSRect(x: 20, y: 60, width: 540, height: 500))
+        tabView = NSTabView(frame: NSRect(x: 20, y: 60, width: 620, height: 500))
         tabView.autoresizingMask = [.width, .height]
 
         // Add tabs
@@ -133,7 +170,7 @@ class SettingsWindowController: NSWindowController {
 
     private func createGeneralTab() -> NSTabViewItem {
         let item = NSTabViewItem()
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 460))
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 460))
 
         var y: CGFloat = 420
 
@@ -257,7 +294,7 @@ class SettingsWindowController: NSWindowController {
 
     private func createShortcutsTab() -> NSTabViewItem {
         let item = NSTabViewItem()
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 460))
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 460))
 
         var y: CGFloat = 420
         let popupX: CGFloat = 240
@@ -390,7 +427,7 @@ class SettingsWindowController: NSWindowController {
 
     private func createAppearanceTab() -> NSTabViewItem {
         let item = NSTabViewItem()
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 460))
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 460))
 
         var y: CGFloat = 420
         let colorWellWidth: CGFloat = 44
@@ -518,7 +555,7 @@ class SettingsWindowController: NSWindowController {
 
     private func createPresetsTab() -> NSTabViewItem {
         let item = NSTabViewItem()
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 460))
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 460))
 
         var y: CGFloat = 420
 
@@ -528,38 +565,40 @@ class SettingsWindowController: NSWindowController {
         view.addSubview(headerLabel)
         y -= 20
 
-        let descLabel = createLabel("Define keyboard shortcuts for quick window positioning (0-10 presets)", frame: NSRect(x: 20, y: y, width: 480, height: 16))
+        let descLabel = createLabel("Define keyboard shortcuts for quick window positioning (up to 30 presets)", frame: NSRect(x: 20, y: y, width: 560, height: 16))
         descLabel.font = NSFont.systemFont(ofSize: 11)
         descLabel.textColor = .secondaryLabelColor
         view.addSubview(descLabel)
         y -= 30
 
-        // Column headers (aligned with PresetRowView elements)
-        // Scroll view at x=10 with ~2px bezel border inset, so content starts at ~12
-        // Row elements: Key at x=5, Coords at x=95, Auto at x=335, Delete at x=395
+        // Column headers aligned with single-row layout
         let headerOffset: CGFloat = 12  // scroll view x (10) + border inset (2)
 
-        let keyLabel = createLabel("Key", frame: NSRect(x: headerOffset + 5, y: y, width: 80, height: 16))
-        keyLabel.font = NSFont.boldSystemFont(ofSize: 11)
-        view.addSubview(keyLabel)
+        let shortcutLabel = createLabel("Shortcut", frame: NSRect(x: headerOffset + 5, y: y, width: 100, height: 16))
+        shortcutLabel.font = NSFont.boldSystemFont(ofSize: 11)
+        view.addSubview(shortcutLabel)
 
-        let coordLabel = createLabel("Coordinates (x1,y1);(x2,y2)", frame: NSRect(x: headerOffset + 95, y: y, width: 200, height: 16))
+        let coordLabel = createLabel("Positions (| = cycle)", frame: NSRect(x: headerOffset + 110, y: y, width: 160, height: 16))
         coordLabel.font = NSFont.boldSystemFont(ofSize: 11)
         view.addSubview(coordLabel)
 
-        let autoLabel = createLabel("Auto-Apply", frame: NSRect(x: headerOffset + 310, y: y, width: 75, height: 16))
+        let cycleLabel = createLabel("Cycle ms", frame: NSRect(x: headerOffset + 345, y: y, width: 70, height: 16))
+        cycleLabel.font = NSFont.boldSystemFont(ofSize: 11)
+        view.addSubview(cycleLabel)
+
+        let autoLabel = createLabel("Auto", frame: NSRect(x: headerOffset + 430, y: y, width: 40, height: 16))
         autoLabel.font = NSFont.boldSystemFont(ofSize: 11)
         view.addSubview(autoLabel)
         y -= 18  // header height (16) + small gap (2)
 
         // Scroll view for presets
-        presetsScrollView = NSScrollView(frame: NSRect(x: 10, y: 60, width: 500, height: y - 60))
+        presetsScrollView = NSScrollView(frame: NSRect(x: 10, y: 60, width: 580, height: y - 60))
         presetsScrollView.hasVerticalScroller = true
         presetsScrollView.hasHorizontalScroller = false
         presetsScrollView.autohidesScrollers = true
         presetsScrollView.borderType = .bezelBorder
 
-        presetsContainer = NSView(frame: NSRect(x: 0, y: 0, width: 480, height: 300))
+        presetsContainer = NSView(frame: NSRect(x: 0, y: 0, width: 560, height: 300))
         presetsScrollView.documentView = presetsContainer
         view.addSubview(presetsScrollView)
 
@@ -572,8 +611,8 @@ class SettingsWindowController: NSWindowController {
         view.addSubview(addPresetButton)
 
         // Help text
-        let helpLabel = createLabel("Coordinates: (0,0) = top-left, (1,1) = bottom-right. Example: (0.5,0);(1,1) = right half", frame: NSRect(x: 150, y: 27, width: 350, height: 16))
-        helpLabel.font = NSFont.systemFont(ofSize: 10)
+        let helpLabel = createLabel("Format: (x1,y1);(x2,y2) | Use | to add cycle positions. Press key again within timeout to cycle.", frame: NSRect(x: 150, y: 27, width: 360, height: 16))
+        helpLabel.font = NSFont.systemFont(ofSize: 9)
         helpLabel.textColor = .secondaryLabelColor
         view.addSubview(helpLabel)
 
@@ -582,10 +621,10 @@ class SettingsWindowController: NSWindowController {
     }
 
     @objc private func addPreset() {
-        guard presetRows.count < 10 else {
+        guard presetRows.count < 30 else {
             let alert = NSAlert()
             alert.messageText = "Maximum Presets Reached"
-            alert.informativeText = "You can have at most 10 presets."
+            alert.informativeText = "You can have at most 30 presets."
             alert.alertStyle = .informational
             alert.runModal()
             return
@@ -594,11 +633,10 @@ class SettingsWindowController: NSWindowController {
         let preset = TilingPreset(
             keyCode: 0,
             keyString: "",
-            startX: 0,
-            startY: 0,
-            endX: 0.5,
-            endY: 1,
-            autoConfirm: true
+            modifiers: 0,
+            positions: [PresetPosition(startX: 0, startY: 0, endX: 0.5, endY: 1)],
+            autoConfirm: true,
+            cycleTimeout: 2000
         )
         addPresetRow(preset)
         updatePresetsContainerHeight()
@@ -608,7 +646,7 @@ class SettingsWindowController: NSWindowController {
         let rowHeight: CGFloat = 35
         let y = CGFloat(presetRows.count) * rowHeight
 
-        let row = PresetRowView(frame: NSRect(x: 0, y: y, width: 480, height: rowHeight), preset: preset)
+        let row = PresetRowView(frame: NSRect(x: 0, y: y, width: 560, height: rowHeight), preset: preset)
         row.onDelete = { [weak self] in
             self?.removePresetRow(row)
         }
@@ -623,14 +661,14 @@ class SettingsWindowController: NSWindowController {
 
         // Reposition remaining rows
         for (i, row) in presetRows.enumerated() {
-            let rowHeight: CGFloat = 35
+            let rowHeight: CGFloat = 60
             row.frame.origin.y = CGFloat(i) * rowHeight
         }
         updatePresetsContainerHeight()
     }
 
     private func updatePresetsContainerHeight() {
-        let rowHeight: CGFloat = 35
+        let rowHeight: CGFloat = 60
         let height = max(300, CGFloat(presetRows.count) * rowHeight + 10)
         presetsContainer.frame.size.height = height
 
@@ -644,7 +682,7 @@ class SettingsWindowController: NSWindowController {
 
     private func createAboutTab() -> NSTabViewItem {
         let item = NSTabViewItem()
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 460))
+        let view = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 460))
 
         let centerX = view.bounds.width / 2
 
@@ -990,11 +1028,17 @@ class SettingsWindowController: NSWindowController {
             shortcutField.stringValue = "..."
             window?.makeFirstResponder(window?.contentView)
 
-            // Set up local event monitor
-            NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            // Remove any existing monitor first
+            if let monitor = shortcutMonitor {
+                NSEvent.removeMonitor(monitor)
+                shortcutMonitor = nil
+            }
+
+            // Set up local event monitor and store it
+            shortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
                 guard let self = self, self.isRecordingShortcut else { return event }
 
-                // Get modifiers
+                // Get modifiers (mask to only the ones we care about)
                 var modifiers: UInt = 0
                 if event.modifierFlags.contains(.control) {
                     modifiers |= KeyboardShortcut.Modifiers.control
@@ -1018,6 +1062,10 @@ class SettingsWindowController: NSWindowController {
                 if event.keyCode == 53 && modifiers == 0 {
                     self.isRecordingShortcut = false
                     self.shortcutRecordButton.title = "Record"
+                    if let monitor = self.shortcutMonitor {
+                        NSEvent.removeMonitor(monitor)
+                        self.shortcutMonitor = nil
+                    }
                     self.loadCurrentSettings()
                     return nil
                 }
@@ -1029,14 +1077,26 @@ class SettingsWindowController: NSWindowController {
                     keyString: keyString
                 )
 
+                print("Recorded shortcut: keyCode=\(event.keyCode), modifiers=\(modifiers), display=\(self.recordedShortcut?.displayString ?? "")")
+
                 self.shortcutField.stringValue = self.recordedShortcut?.displayString ?? ""
                 self.isRecordingShortcut = false
                 self.shortcutRecordButton.title = "Record"
+
+                // Remove the monitor
+                if let monitor = self.shortcutMonitor {
+                    NSEvent.removeMonitor(monitor)
+                    self.shortcutMonitor = nil
+                }
 
                 return nil
             }
         } else {
             shortcutRecordButton.title = "Record"
+            if let monitor = shortcutMonitor {
+                NSEvent.removeMonitor(monitor)
+                shortcutMonitor = nil
+            }
             if recordedShortcut == nil {
                 loadCurrentSettings()
             }
@@ -1052,8 +1112,14 @@ class SettingsWindowController: NSWindowController {
             secondaryShortcutField.textColor = .labelColor
             window?.makeFirstResponder(window?.contentView)
 
-            // Set up local event monitor
-            NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            // Remove any existing monitor first
+            if let monitor = secondaryShortcutMonitor {
+                NSEvent.removeMonitor(monitor)
+                secondaryShortcutMonitor = nil
+            }
+
+            // Set up local event monitor and store it
+            secondaryShortcutMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
                 guard let self = self, self.isRecordingSecondaryShortcut else { return event }
 
                 // Get modifiers
@@ -1080,6 +1146,10 @@ class SettingsWindowController: NSWindowController {
                 if event.keyCode == 53 && modifiers == 0 {
                     self.isRecordingSecondaryShortcut = false
                     self.secondaryShortcutRecordButton.title = "Record"
+                    if let monitor = self.secondaryShortcutMonitor {
+                        NSEvent.removeMonitor(monitor)
+                        self.secondaryShortcutMonitor = nil
+                    }
                     self.loadCurrentSettings()
                     return nil
                 }
@@ -1091,6 +1161,8 @@ class SettingsWindowController: NSWindowController {
                     keyString: keyString
                 )
 
+                print("Recorded secondary shortcut: keyCode=\(event.keyCode), modifiers=\(modifiers), display=\(self.recordedSecondaryShortcut?.displayString ?? "")")
+
                 self.secondaryShortcutField.stringValue = self.recordedSecondaryShortcut?.displayString ?? ""
                 self.secondaryShortcutField.textColor = .labelColor
                 self.hasSecondaryShortcut = true
@@ -1098,10 +1170,20 @@ class SettingsWindowController: NSWindowController {
                 self.isRecordingSecondaryShortcut = false
                 self.secondaryShortcutRecordButton.title = "Record"
 
+                // Remove the monitor
+                if let monitor = self.secondaryShortcutMonitor {
+                    NSEvent.removeMonitor(monitor)
+                    self.secondaryShortcutMonitor = nil
+                }
+
                 return nil
             }
         } else {
             secondaryShortcutRecordButton.title = "Record"
+            if let monitor = secondaryShortcutMonitor {
+                NSEvent.removeMonitor(monitor)
+                secondaryShortcutMonitor = nil
+            }
             if !hasSecondaryShortcut {
                 secondaryShortcutField.stringValue = "Not set"
                 secondaryShortcutField.textColor = .secondaryLabelColor
@@ -1248,14 +1330,15 @@ extension SettingsColor {
 
 // MARK: - PresetRowView
 
-/// A row view for editing a single tiling preset
+/// A row view for editing a single tiling preset with single-button shortcut recording
 class PresetRowView: NSView {
-    private var keyButton: NSButton!
+    private var recordButton: NSButton!
     private var coordinatesField: NSTextField!
+    private var timeoutField: NSTextField!
     private var autoConfirmCheckbox: NSButton!
     private var deleteButton: NSButton!
 
-    private var isRecordingKey = false
+    private var isRecording = false
     private var localMonitor: Any?
 
     var preset: TilingPreset {
@@ -1274,74 +1357,122 @@ class PresetRowView: NSView {
     }
 
     override init(frame: NSRect) {
-        self.preset = TilingPreset(keyCode: 0, keyString: "", startX: 0, startY: 0, endX: 0.5, endY: 1, autoConfirm: true)
+        self.preset = TilingPreset(
+            keyCode: 0,
+            keyString: "",
+            modifiers: 0,
+            positions: [PresetPosition(startX: 0, startY: 0, endX: 0.5, endY: 1)],
+            autoConfirm: true,
+            cycleTimeout: 2000
+        )
         super.init(frame: frame)
         setupUI()
         updateUI()
     }
 
     required init?(coder: NSCoder) {
-        self.preset = TilingPreset(keyCode: 0, keyString: "", startX: 0, startY: 0, endX: 0.5, endY: 1, autoConfirm: true)
+        self.preset = TilingPreset(
+            keyCode: 0,
+            keyString: "",
+            modifiers: 0,
+            positions: [PresetPosition(startX: 0, startY: 0, endX: 0.5, endY: 1)],
+            autoConfirm: true,
+            cycleTimeout: 2000
+        )
         super.init(coder: coder)
         setupUI()
         updateUI()
     }
 
     private func setupUI() {
-        // Key recording button
-        keyButton = NSButton(frame: NSRect(x: 5, y: 3, width: 80, height: 24))
-        keyButton.title = "Record"
-        keyButton.bezelStyle = .rounded
-        keyButton.target = self
-        keyButton.action = #selector(toggleRecordKey)
-        addSubview(keyButton)
+        let y: CGFloat = 5
+        var x: CGFloat = 5
 
-        // Coordinates field
-        coordinatesField = NSTextField(frame: NSRect(x: 95, y: 5, width: 200, height: 22))
-        coordinatesField.placeholderString = "(0,0);(0.5,1)"
-        coordinatesField.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        // Single record button that captures modifiers + key
+        recordButton = NSButton(frame: NSRect(x: x, y: y, width: 100, height: 22))
+        recordButton.title = "Record"
+        recordButton.bezelStyle = .rounded
+        recordButton.font = NSFont.systemFont(ofSize: 11)
+        recordButton.target = self
+        recordButton.action = #selector(toggleRecord)
+        addSubview(recordButton)
+        x += 105
+
+        // Coordinates field (supports multiple positions with | separator)
+        coordinatesField = NSTextField(frame: NSRect(x: x, y: y, width: 230, height: 22))
+        coordinatesField.placeholderString = "(0,0);(0.5,1) | (0,0);(0.67,1)"
+        coordinatesField.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
         coordinatesField.target = self
         coordinatesField.action = #selector(coordinatesChanged)
         addSubview(coordinatesField)
+        x += 235
+
+        // Timeout field with ms label
+        timeoutField = NSTextField(frame: NSRect(x: x, y: y, width: 55, height: 22))
+        timeoutField.font = NSFont.systemFont(ofSize: 11)
+        timeoutField.alignment = .right
+        timeoutField.target = self
+        timeoutField.action = #selector(timeoutChanged)
+        addSubview(timeoutField)
+        x += 55
+
+        let msLabel = NSTextField(frame: NSRect(x: x, y: y + 3, width: 25, height: 16))
+        msLabel.stringValue = "ms"
+        msLabel.font = NSFont.systemFont(ofSize: 10)
+        msLabel.isBordered = false
+        msLabel.isEditable = false
+        msLabel.backgroundColor = .clear
+        addSubview(msLabel)
+        x += 30
 
         // Auto-confirm checkbox
         autoConfirmCheckbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(autoConfirmChanged))
-        autoConfirmCheckbox.frame = NSRect(x: 335, y: 5, width: 20, height: 20)
+        autoConfirmCheckbox.frame = NSRect(x: x, y: y, width: 22, height: 22)
         addSubview(autoConfirmCheckbox)
+        x += 30
 
         // Delete button
-        deleteButton = NSButton(frame: NSRect(x: 395, y: 3, width: 70, height: 24))
+        deleteButton = NSButton(frame: NSRect(x: x, y: y, width: 65, height: 22))
         deleteButton.title = "Delete"
         deleteButton.bezelStyle = .rounded
+        deleteButton.font = NSFont.systemFont(ofSize: 11)
         deleteButton.target = self
         deleteButton.action = #selector(deletePressed)
         addSubview(deleteButton)
     }
 
     private func updateUI() {
+        // Update record button with full shortcut display
         if preset.keyString.isEmpty {
-            keyButton.title = "Record"
+            recordButton.title = "Record"
         } else {
-            keyButton.title = preset.keyString
+            recordButton.title = preset.shortcutDisplayString
         }
+
+        // Update coordinates
         coordinatesField.stringValue = preset.coordinateString
+
+        // Update timeout
+        timeoutField.stringValue = "\(preset.cycleTimeout)"
+
+        // Update auto-confirm
         autoConfirmCheckbox.state = preset.autoConfirm ? .on : .off
     }
 
-    @objc private func toggleRecordKey() {
-        isRecordingKey.toggle()
+    @objc private func toggleRecord() {
+        isRecording.toggle()
 
-        if isRecordingKey {
-            keyButton.title = "Press..."
+        if isRecording {
+            recordButton.title = "Press key..."
             window?.makeFirstResponder(nil)
 
             localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                guard let self = self, self.isRecordingKey else { return event }
+                guard let self = self, self.isRecording else { return event }
 
                 // Escape cancels recording
-                if event.keyCode == 53 {
-                    self.isRecordingKey = false
-                    self.keyButton.title = self.preset.keyString.isEmpty ? "Record" : self.preset.keyString
+                if event.keyCode == 53 && !event.modifierFlags.contains(.shift) {
+                    self.isRecording = false
+                    self.updateUI()
                     if let monitor = self.localMonitor {
                         NSEvent.removeMonitor(monitor)
                         self.localMonitor = nil
@@ -1349,38 +1480,38 @@ class PresetRowView: NSView {
                     return nil
                 }
 
-                // Only allow alphanumeric keys (no modifiers for presets)
-                if !event.modifierFlags.contains(.command) &&
-                   !event.modifierFlags.contains(.control) &&
-                   !event.modifierFlags.contains(.option) {
+                // Don't allow Tab (reserved for monitor switching)
+                if event.keyCode == 48 {
+                    return nil
+                }
 
-                    let keyString = self.keyCodeToString(event.keyCode)
+                let keyString = self.keyCodeToString(event.keyCode)
 
-                    // Don't allow Tab (reserved for monitor switching)
-                    if event.keyCode == 48 {
-                        return nil
-                    }
+                // Capture modifiers from the key event
+                var modifiers: UInt = 0
+                if event.modifierFlags.contains(.control) { modifiers |= KeyboardShortcut.Modifiers.control }
+                if event.modifierFlags.contains(.option) { modifiers |= KeyboardShortcut.Modifiers.option }
+                if event.modifierFlags.contains(.shift) { modifiers |= KeyboardShortcut.Modifiers.shift }
+                if event.modifierFlags.contains(.command) { modifiers |= KeyboardShortcut.Modifiers.command }
 
-                    self.preset = TilingPreset(
-                        keyCode: event.keyCode,
-                        keyString: keyString,
-                        startX: self.preset.startX,
-                        startY: self.preset.startY,
-                        endX: self.preset.endX,
-                        endY: self.preset.endY,
-                        autoConfirm: self.preset.autoConfirm
-                    )
+                self.preset = TilingPreset(
+                    keyCode: event.keyCode,
+                    keyString: keyString,
+                    modifiers: modifiers,
+                    positions: self.preset.positions,
+                    autoConfirm: self.preset.autoConfirm,
+                    cycleTimeout: self.preset.cycleTimeout
+                )
 
-                    self.isRecordingKey = false
-                    if let monitor = self.localMonitor {
-                        NSEvent.removeMonitor(monitor)
-                        self.localMonitor = nil
-                    }
+                self.isRecording = false
+                if let monitor = self.localMonitor {
+                    NSEvent.removeMonitor(monitor)
+                    self.localMonitor = nil
                 }
                 return nil
             }
         } else {
-            keyButton.title = preset.keyString.isEmpty ? "Record" : preset.keyString
+            updateUI()
             if let monitor = localMonitor {
                 NSEvent.removeMonitor(monitor)
                 localMonitor = nil
@@ -1389,28 +1520,39 @@ class PresetRowView: NSView {
     }
 
     @objc private func coordinatesChanged() {
-        if let coords = TilingPreset.parseCoordinates(coordinatesField.stringValue) {
+        let positions = TilingPreset.parsePositions(coordinatesField.stringValue)
+        if !positions.isEmpty {
             preset = TilingPreset(
                 keyCode: preset.keyCode,
                 keyString: preset.keyString,
-                startX: coords.startX,
-                startY: coords.startY,
-                endX: coords.endX,
-                endY: coords.endY,
-                autoConfirm: preset.autoConfirm
+                modifiers: preset.modifiers,
+                positions: positions,
+                autoConfirm: preset.autoConfirm,
+                cycleTimeout: preset.cycleTimeout
             )
         }
+    }
+
+    @objc private func timeoutChanged() {
+        let timeout = Int(timeoutField.stringValue) ?? 2000
+        preset = TilingPreset(
+            keyCode: preset.keyCode,
+            keyString: preset.keyString,
+            modifiers: preset.modifiers,
+            positions: preset.positions,
+            autoConfirm: preset.autoConfirm,
+            cycleTimeout: timeout
+        )
     }
 
     @objc private func autoConfirmChanged() {
         preset = TilingPreset(
             keyCode: preset.keyCode,
             keyString: preset.keyString,
-            startX: preset.startX,
-            startY: preset.startY,
-            endX: preset.endX,
-            endY: preset.endY,
-            autoConfirm: autoConfirmCheckbox.state == .on
+            modifiers: preset.modifiers,
+            positions: preset.positions,
+            autoConfirm: autoConfirmCheckbox.state == .on,
+            cycleTimeout: preset.cycleTimeout
         )
     }
 
@@ -1435,18 +1577,17 @@ class PresetRowView: NSView {
 
     /// Get the current preset from UI state
     func getPreset() -> TilingPreset {
-        // Parse coordinates from field in case user edited it
-        if let coords = TilingPreset.parseCoordinates(coordinatesField.stringValue) {
-            return TilingPreset(
-                keyCode: preset.keyCode,
-                keyString: preset.keyString,
-                startX: coords.startX,
-                startY: coords.startY,
-                endX: coords.endX,
-                endY: coords.endY,
-                autoConfirm: autoConfirmCheckbox.state == .on
-            )
-        }
-        return preset
+        // Parse positions from field in case user edited it
+        let positions = TilingPreset.parsePositions(coordinatesField.stringValue)
+        let timeout = Int(timeoutField.stringValue) ?? preset.cycleTimeout
+
+        return TilingPreset(
+            keyCode: preset.keyCode,
+            keyString: preset.keyString,
+            modifiers: preset.modifiers,
+            positions: positions.isEmpty ? preset.positions : positions,
+            autoConfirm: autoConfirmCheckbox.state == .on,
+            cycleTimeout: timeout
+        )
     }
 }
