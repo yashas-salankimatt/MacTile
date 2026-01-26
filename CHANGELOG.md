@@ -2,6 +2,14 @@
 
 All notable changes to MacTile will be documented in this file.
 
+## [1.0.5] - 2026-01-25
+
+### Fixed
+
+- **Finder Window Cycling**: Fixed focus preset not cycling through Finder windows
+  - Finder's Desktop was being included in the window list, preventing proper cycling
+  - Now filters to only include windows with a close button, excluding the Desktop
+
 ## [1.0.4] - 2026-01-24
 
 ### Added

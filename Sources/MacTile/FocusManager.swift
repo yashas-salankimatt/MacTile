@@ -98,19 +98,32 @@ class FocusManager {
 
         var windowListRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windowListRef) == .success,
-              let axWindows = windowListRef as? [AXUIElement],
-              axWindows.count > 1 else {
-            print("[FocusManager] Only one window (or no AX windows) for \(bundleID), nothing to cycle")
+              let axWindows = windowListRef as? [AXUIElement] else {
+            print("[FocusManager] No AX windows for \(bundleID)")
             return true
         }
 
-        print("[FocusManager] Found \(axWindows.count) AX windows for \(bundleID), cycling to next")
+        // Filter to only include "standard" windows that have a close button.
+        // This excludes special windows like Finder's Desktop, which appears as an AXWindow
+        // but cannot be raised/cycled in the normal sense.
+        let cyclableWindows = axWindows.filter { window in
+            var closeButtonRef: CFTypeRef?
+            let result = AXUIElementCopyAttributeValue(window, kAXCloseButtonAttribute as CFString, &closeButtonRef)
+            return result == .success && closeButtonRef != nil
+        }
+
+        guard cyclableWindows.count > 1 else {
+            print("[FocusManager] Only \(cyclableWindows.count) cyclable window(s) for \(bundleID) (filtered from \(axWindows.count) total), nothing to cycle")
+            return true
+        }
+
+        print("[FocusManager] Found \(cyclableWindows.count) cyclable windows for \(bundleID) (from \(axWindows.count) total), cycling to next")
 
         // Raise the LAST window - this properly cycles through all windows
         // AX windows are in Z-order: [front, ..., back]
         // By raising the back-most window, we cycle: A,B,C -> C,A,B -> B,C,A -> A,B,C
         // This works correctly for any number of windows (2, 3, or more)
-        let targetWindow = axWindows[axWindows.count - 1]
+        let targetWindow = cyclableWindows[cyclableWindows.count - 1]
 
         // Get target window title for logging
         var titleRef: CFTypeRef?

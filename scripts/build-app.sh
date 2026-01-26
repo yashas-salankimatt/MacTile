@@ -8,7 +8,7 @@ set -e
 # Configuration
 APP_NAME="MacTile"
 BUNDLE_ID="com.mactile.MacTile"
-VERSION="1.0.4"
+VERSION="1.0.5"
 
 # Paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
