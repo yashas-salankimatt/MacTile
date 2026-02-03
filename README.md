@@ -12,6 +12,7 @@ A macOS window tiling application inspired by [gTile](https://github.com/gTile/g
 - **Dual Global Hotkeys**: Primary (`Control+Option+G`) and secondary (`Command+Return`) shortcuts
 - **Tiling Presets**: Quick keyboard shortcuts to tile windows to predefined positions with cycling support
 - **Focus Presets**: Keyboard shortcuts to quickly focus applications and cycle through their windows
+- **Virtual Spaces**: Save and restore window arrangements per monitor with 9 spaces each
 - **Customizable Appearance**: Configure colors, opacity, and visual elements
 - **Settings Window**: Configure grid sizes, spacing, insets, shortcuts, and behavior
 - **Menu Bar App**: Runs in the menu bar with no dock icon
@@ -135,6 +136,64 @@ Focus presets allow you to quickly switch to specific applications and cycle thr
 | `⌃⌥S` | Slack | Quick access to Slack |
 | `⌃⌥C` | VS Code | Jump to your editor |
 
+## Virtual Spaces
+
+Virtual Spaces allow you to save and restore window arrangements on a per-monitor basis. Each monitor can have up to 9 virtual spaces, which serve as containers for window positions, sizes, and z-order (stacking order).
+
+### Features
+
+- **9 Spaces Per Monitor**: Each monitor independently manages its own set of 9 virtual spaces
+- **Save Window Arrangements**: Capture the positions, sizes, and stacking order of visible windows
+- **Restore with Z-Order**: Windows are restored to their exact positions with correct stacking order
+- **Focus History**: After restore, Alt+Tab order matches the saved z-order (topmost window focused first)
+- **Visibility Filtering**: Only saves windows that are at least 40% visible (hidden windows are excluded)
+- **Menu Bar Indicator**: Shows the active space number and name in the menu bar
+- **Persistent Storage**: Virtual spaces are saved and persist across app restarts
+
+### Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `Control+Option+Shift+1-9` | Save current windows to virtual space 1-9 |
+| `Control+Option+1-9` | Restore windows from virtual space 1-9 |
+| `Control+Option+Comma` | Rename the currently active virtual space |
+
+### How It Works
+
+1. **Saving a Space**: Press `Control+Option+Shift+1` (or 2-9) to save the current visible windows on the focused monitor to that virtual space. The space becomes "active" and its name appears in the menu bar.
+
+2. **Restoring a Space**: Press `Control+Option+1` (or 2-9) to restore windows from that virtual space. Windows are moved to their saved positions and sizes, and the stacking order is preserved.
+
+3. **Active State**: A virtual space is "active" after being saved or restored. It becomes "inactive" when:
+   - A window not in that space gains focus
+   - A window in that space gets resized or moved
+
+4. **Naming Spaces**: Press `Control+Option+Comma` when a space is active to give it a custom name (e.g., "Development", "Communication").
+
+### Multi-Monitor Support
+
+Virtual spaces are tracked independently per monitor:
+- Each monitor has its own set of 9 virtual spaces
+- Saving/restoring affects only the monitor containing the focused window
+- You can have different spaces active on different monitors simultaneously
+
+### Visibility Filtering
+
+When saving a virtual space, MacTile only captures windows that are meaningfully visible:
+- Windows must be at least 40% visible (not mostly covered by other windows)
+- This prevents saving windows that are completely hidden behind others
+- Uses grid-based occlusion detection for accurate visibility calculation
+
+### Example Workflow
+
+1. Arrange your windows for a coding session (editor, terminal, browser)
+2. Press `Control+Option+Shift+1` to save as Space 1
+3. Press `Control+Option+Comma` and name it "Development"
+4. Rearrange windows for communication (Slack, email, calendar)
+5. Press `Control+Option+Shift+2` to save as Space 2
+6. Name it "Communication"
+7. Now switch between setups instantly with `Control+Option+1` and `Control+Option+2`
+
 ## Settings
 
 Access Settings from the menu bar icon. You can configure:
@@ -208,17 +267,18 @@ For a detailed explanation of how MacTile's window management system works, incl
 MacTile is built with a clean separation of concerns:
 
 - **MacTileCore**: Core library with grid data structures, operations, and settings
-  - `Grid.swift`: GridSize, GridOffset, GridSelection, and GridOperations
-  - `Settings.swift`: MacTileSettings, KeyboardShortcut, TilingPreset, FocusPreset, AppearanceSettings
+  - `Grid.swift`: GridSize, GridOffset, GridSelection, GridOperations, and VisibilityCalculator
+  - `Settings.swift`: MacTileSettings, KeyboardShortcut, TilingPreset, FocusPreset, AppearanceSettings, VirtualSpace, VirtualSpacesStorage
   - `WindowManagement.swift`: WindowManagerProtocol and WindowTiler
 
 - **MacTile**: Main application
-  - `AppDelegate.swift`: Application lifecycle, menu bar, global hotkey setup (including focus presets)
+  - `AppDelegate.swift`: Application lifecycle, menu bar, global hotkey setup (including focus presets and virtual spaces)
   - `OverlayWindowController.swift`: Grid overlay UI, keyboard/mouse handling, multi-monitor support, tiling presets
   - `SettingsWindowController.swift`: Settings window UI with tabs for all configuration options
   - `SettingsManager.swift`: UserDefaults persistence for all settings
   - `WindowManager.swift`: Accessibility API integration for window manipulation
   - `FocusManager.swift`: Application focus switching and window cycling via Accessibility API
+  - `VirtualSpaceManager.swift`: Virtual spaces for saving/restoring window arrangements per monitor
 
 ## Testing
 
@@ -233,6 +293,8 @@ Tests cover:
 - Grid operations (pan, adjust/extend, shrink)
 - Coordinate conversion (selection to rectangle)
 - Window tiling logic with mock window manager
+- Virtual spaces (storage, encoding/decoding, z-order preservation)
+- Visibility calculator (occlusion detection, threshold filtering)
 
 ## License
 
