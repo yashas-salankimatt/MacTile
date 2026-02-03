@@ -325,3 +325,111 @@ public enum GridOperations {
         )
     }
 }
+
+// MARK: - Visibility Calculator
+
+/// Calculates window visibility based on occlusion by other windows
+public enum VisibilityCalculator {
+
+    /// Calculate what percentage of a window is visible (not occluded by other windows)
+    ///
+    /// Uses a grid sampling approach: divides the window into a grid of sample points
+    /// and counts how many are not covered by any occluding window.
+    ///
+    /// - Parameters:
+    ///   - window: The window rectangle to check visibility for
+    ///   - occluders: Array of rectangles that may occlude the window (windows in front)
+    ///   - gridSize: Number of sample points per dimension (default: 20x20 = 400 points)
+    /// - Returns: Visibility percentage from 0.0 (fully hidden) to 100.0 (fully visible)
+    public static func calculateVisibilityPercentage(
+        of window: CGRect,
+        occludedBy occluders: [CGRect],
+        gridSize: Int = 20
+    ) -> CGFloat {
+        // Handle edge cases
+        guard gridSize > 0 else {
+            return 0.0  // Invalid grid size, can't calculate
+        }
+
+        guard window.width > 0 && window.height > 0 else {
+            return 0.0
+        }
+
+        guard !occluders.isEmpty else {
+            return 100.0
+        }
+
+        // Pre-filter occluders to only those that actually intersect with the window
+        let relevantOccluders = occluders.filter { $0.intersects(window) }
+
+        guard !relevantOccluders.isEmpty else {
+            return 100.0
+        }
+
+        // Calculate step sizes for the grid
+        let stepX = window.width / CGFloat(gridSize)
+        let stepY = window.height / CGFloat(gridSize)
+
+        var visiblePoints = 0
+        let totalPoints = gridSize * gridSize
+
+        // Sample points in a grid pattern
+        // Use center of each grid cell for sampling (offset by 0.5)
+        for i in 0..<gridSize {
+            for j in 0..<gridSize {
+                let sampleX = window.minX + stepX * (CGFloat(i) + 0.5)
+                let sampleY = window.minY + stepY * (CGFloat(j) + 0.5)
+                let samplePoint = CGPoint(x: sampleX, y: sampleY)
+
+                // Check if this point is covered by any occluder
+                var isCovered = false
+                for occluder in relevantOccluders {
+                    if occluder.contains(samplePoint) {
+                        isCovered = true
+                        break
+                    }
+                }
+
+                if !isCovered {
+                    visiblePoints += 1
+                }
+            }
+        }
+
+        return (CGFloat(visiblePoints) / CGFloat(totalPoints)) * 100.0
+    }
+
+    /// Filter a list of windows by visibility, keeping only those above the minimum threshold
+    ///
+    /// Windows are expected to be ordered by z-index (lower index = in front).
+    /// Each window's visibility is calculated considering only windows in front of it.
+    ///
+    /// - Parameters:
+    ///   - windows: Array of tuples containing window frame and z-index
+    ///   - minimumVisibility: Minimum visibility percentage required (default: 40%)
+    /// - Returns: Array of z-indices for windows that meet the visibility threshold
+    public static func filterByVisibility(
+        windows: [(frame: CGRect, zIndex: Int)],
+        minimumVisibility: CGFloat = 40.0
+    ) -> [Int] {
+        var visibleIndices: [Int] = []
+
+        for window in windows {
+            // Find all windows in front of this one (lower zIndex = in front)
+            let occluders = windows
+                .filter { $0.zIndex < window.zIndex }
+                .map { $0.frame }
+
+            let visibility = calculateVisibilityPercentage(
+                of: window.frame,
+                occludedBy: occluders
+            )
+
+            if visibility >= minimumVisibility {
+                visibleIndices.append(window.zIndex)
+            }
+        }
+
+        return visibleIndices
+    }
+}

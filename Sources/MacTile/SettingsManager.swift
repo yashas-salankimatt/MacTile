@@ -8,16 +8,21 @@ class SettingsManager {
     private let userDefaults = UserDefaults.standard
     private let settingsKey = "MacTileSettings"
 
+    /// Backing storage for settings (allows modification without triggering didSet)
+    private var _settings: MacTileSettings
+
     /// Current settings (cached in memory)
-    private(set) var settings: MacTileSettings {
-        didSet {
+    var settings: MacTileSettings {
+        get { _settings }
+        set {
+            _settings = newValue
             saveSettings()
             NotificationCenter.default.post(name: .settingsDidChange, object: self)
         }
     }
 
     private init() {
-        settings = Self.loadSettings() ?? .default
+        _settings = Self.loadSettings() ?? .default
     }
 
     // MARK: - Persistence
@@ -70,7 +75,8 @@ class SettingsManager {
             overlayKeyboard: settings.overlayKeyboard,
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
-            appearance: settings.appearance
+            appearance: settings.appearance,
+            virtualSpaces: settings.virtualSpaces
         )
         settings = newSettings
     }
@@ -91,7 +97,8 @@ class SettingsManager {
             overlayKeyboard: settings.overlayKeyboard,
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
-            appearance: settings.appearance
+            appearance: settings.appearance,
+            virtualSpaces: settings.virtualSpaces
         )
     }
 
@@ -111,7 +118,8 @@ class SettingsManager {
             overlayKeyboard: settings.overlayKeyboard,
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
-            appearance: settings.appearance
+            appearance: settings.appearance,
+            virtualSpaces: settings.virtualSpaces
         )
     }
 
@@ -131,7 +139,8 @@ class SettingsManager {
             overlayKeyboard: settings.overlayKeyboard,
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
-            appearance: settings.appearance
+            appearance: settings.appearance,
+            virtualSpaces: settings.virtualSpaces
         )
     }
 
@@ -151,7 +160,8 @@ class SettingsManager {
             overlayKeyboard: settings.overlayKeyboard,
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
-            appearance: settings.appearance
+            appearance: settings.appearance,
+            virtualSpaces: settings.virtualSpaces
         )
     }
 
@@ -171,7 +181,8 @@ class SettingsManager {
             overlayKeyboard: settings.overlayKeyboard,
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
-            appearance: settings.appearance
+            appearance: settings.appearance,
+            virtualSpaces: settings.virtualSpaces
         )
     }
 
@@ -191,7 +202,8 @@ class SettingsManager {
             overlayKeyboard: settings.overlayKeyboard,
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
-            appearance: settings.appearance
+            appearance: settings.appearance,
+            virtualSpaces: settings.virtualSpaces
         )
     }
 
@@ -211,7 +223,8 @@ class SettingsManager {
             overlayKeyboard: settings.overlayKeyboard,
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
-            appearance: settings.appearance
+            appearance: settings.appearance,
+            virtualSpaces: settings.virtualSpaces
         )
     }
 
@@ -231,7 +244,8 @@ class SettingsManager {
             overlayKeyboard: settings.overlayKeyboard,
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
-            appearance: settings.appearance
+            appearance: settings.appearance,
+            virtualSpaces: settings.virtualSpaces
         )
     }
 
@@ -251,7 +265,8 @@ class SettingsManager {
             overlayKeyboard: keyboard,
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
-            appearance: settings.appearance
+            appearance: settings.appearance,
+            virtualSpaces: settings.virtualSpaces
         )
     }
 
@@ -271,7 +286,8 @@ class SettingsManager {
             overlayKeyboard: settings.overlayKeyboard,
             tilingPresets: presets,
             focusPresets: settings.focusPresets,
-            appearance: settings.appearance
+            appearance: settings.appearance,
+            virtualSpaces: settings.virtualSpaces
         )
     }
 
@@ -291,7 +307,8 @@ class SettingsManager {
             overlayKeyboard: settings.overlayKeyboard,
             tilingPresets: settings.tilingPresets,
             focusPresets: presets,
-            appearance: settings.appearance
+            appearance: settings.appearance,
+            virtualSpaces: settings.virtualSpaces
         )
     }
 
@@ -311,7 +328,8 @@ class SettingsManager {
             overlayKeyboard: settings.overlayKeyboard,
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
-            appearance: appearance
+            appearance: appearance,
+            virtualSpaces: settings.virtualSpaces
         )
     }
 
@@ -331,7 +349,8 @@ class SettingsManager {
             overlayKeyboard: settings.overlayKeyboard,
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
-            appearance: settings.appearance
+            appearance: settings.appearance,
+            virtualSpaces: settings.virtualSpaces
         )
     }
 
@@ -351,8 +370,67 @@ class SettingsManager {
             overlayKeyboard: settings.overlayKeyboard,
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
-            appearance: settings.appearance
+            appearance: settings.appearance,
+            virtualSpaces: settings.virtualSpaces
         )
+    }
+
+    func updateVirtualSpaces(_ spaces: VirtualSpacesStorage) {
+        settings = MacTileSettings(
+            gridSizes: settings.gridSizes,
+            windowSpacing: settings.windowSpacing,
+            insets: settings.insets,
+            autoClose: settings.autoClose,
+            showMenuBarIcon: settings.showMenuBarIcon,
+            launchAtLogin: settings.launchAtLogin,
+            confirmOnClickWithoutDrag: settings.confirmOnClickWithoutDrag,
+            showHelpText: settings.showHelpText,
+            showMonitorIndicator: settings.showMonitorIndicator,
+            toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
+            overlayKeyboard: settings.overlayKeyboard,
+            tilingPresets: settings.tilingPresets,
+            focusPresets: settings.focusPresets,
+            appearance: settings.appearance,
+            virtualSpaces: spaces
+        )
+    }
+
+    /// Save virtual spaces without triggering settings change notification.
+    /// This avoids unnecessary hotkey re-registration which can cause timing issues.
+    func saveVirtualSpacesQuietly(_ spaces: VirtualSpacesStorage) {
+        // Directly modify the underlying storage without triggering didSet
+        let newSettings = MacTileSettings(
+            gridSizes: settings.gridSizes,
+            windowSpacing: settings.windowSpacing,
+            insets: settings.insets,
+            autoClose: settings.autoClose,
+            showMenuBarIcon: settings.showMenuBarIcon,
+            launchAtLogin: settings.launchAtLogin,
+            confirmOnClickWithoutDrag: settings.confirmOnClickWithoutDrag,
+            showHelpText: settings.showHelpText,
+            showMonitorIndicator: settings.showMonitorIndicator,
+            toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
+            overlayKeyboard: settings.overlayKeyboard,
+            tilingPresets: settings.tilingPresets,
+            focusPresets: settings.focusPresets,
+            appearance: settings.appearance,
+            virtualSpaces: spaces
+        )
+
+        // Save directly to UserDefaults without triggering the didSet notification
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .prettyPrinted
+            let data = try encoder.encode(newSettings)
+            userDefaults.set(data, forKey: settingsKey)
+
+            // Update the cached settings without triggering didSet by using a separate internal setter
+            _settings = newSettings
+        } catch {
+            print("Failed to encode settings: \(error)")
+        }
     }
 
     func resetToDefaults() {

@@ -380,6 +380,119 @@ public struct TilingPreset: Codable, Equatable {
     }
 }
 
+// MARK: - Virtual Space Window
+
+/// Represents a saved window in a virtual space
+public struct VirtualSpaceWindow: Codable, Equatable {
+    /// Bundle ID of the application
+    public var appBundleID: String
+    /// Window title (for identification)
+    public var windowTitle: String
+    /// Window frame in screen coordinates
+    public var frame: CGRect
+    /// Z-order index (0 = topmost/frontmost)
+    public var zIndex: Int
+
+    public init(
+        appBundleID: String,
+        windowTitle: String,
+        frame: CGRect,
+        zIndex: Int
+    ) {
+        self.appBundleID = appBundleID
+        self.windowTitle = windowTitle
+        self.frame = frame
+        self.zIndex = zIndex
+    }
+}
+
+// MARK: - Virtual Space
+
+/// Represents a single virtual space (a saved arrangement of windows)
+public struct VirtualSpace: Codable, Equatable {
+    /// The space number (1-9)
+    public var number: Int
+    /// Optional user-defined name
+    public var name: String?
+    /// Windows saved in this space
+    public var windows: [VirtualSpaceWindow]
+    /// Display ID of the monitor this space belongs to
+    public var displayID: UInt32
+
+    /// Human-readable display name for the space (shown in menubar)
+    public var displayName: String {
+        if let name = name, !name.isEmpty {
+            return "\(number): \(name)"
+        }
+        return "\(number)"
+    }
+
+    /// Whether this space has any saved windows
+    public var isEmpty: Bool {
+        return windows.isEmpty
+    }
+
+    public init(
+        number: Int,
+        name: String? = nil,
+        windows: [VirtualSpaceWindow] = [],
+        displayID: UInt32
+    ) {
+        self.number = max(1, min(9, number))
+        self.name = name
+        self.windows = windows
+        self.displayID = displayID
+    }
+
+    /// Create an empty space for a given number and display
+    public static func empty(number: Int, displayID: UInt32) -> VirtualSpace {
+        return VirtualSpace(number: number, displayID: displayID)
+    }
+}
+
+// MARK: - Virtual Spaces Storage
+
+/// Storage for all virtual spaces across monitors
+/// Key is display ID (UInt32), value is dictionary of space number to VirtualSpace
+public struct VirtualSpacesStorage: Codable, Equatable {
+    /// Spaces by display ID, then by space number (1-9)
+    public var spacesByMonitor: [String: [String: VirtualSpace]]
+
+    public init() {
+        self.spacesByMonitor = [:]
+    }
+
+    /// Get a virtual space for a monitor and space number
+    public func getSpace(displayID: UInt32, number: Int) -> VirtualSpace? {
+        let displayKey = String(displayID)
+        let numberKey = String(number)
+        return spacesByMonitor[displayKey]?[numberKey]
+    }
+
+    /// Set a virtual space for a monitor
+    /// Uses space.number (which is clamped to 1-9) as the key to ensure consistency
+    public mutating func setSpace(_ space: VirtualSpace, displayID: UInt32) {
+        let displayKey = String(displayID)
+        let numberKey = String(space.number)  // Use the clamped number from the space itself
+        if spacesByMonitor[displayKey] == nil {
+            spacesByMonitor[displayKey] = [:]
+        }
+        spacesByMonitor[displayKey]?[numberKey] = space
+    }
+
+    /// Get all spaces for a monitor (1-9)
+    public func getSpaces(displayID: UInt32) -> [VirtualSpace] {
+        let displayKey = String(displayID)
+        guard let spaces = spacesByMonitor[displayKey] else { return [] }
+        return (1...9).compactMap { spaces[String($0)] }
+    }
+
+    /// Get all non-empty spaces for a monitor
+    public func getNonEmptySpaces(displayID: UInt32) -> [VirtualSpace] {
+        return getSpaces(displayID: displayID).filter { !$0.isEmpty }
+    }
+}
+
 // MARK: - Focus Preset
 
 /// A keyboard shortcut to focus windows of a specific application
@@ -443,7 +556,7 @@ public struct FocusPreset: Codable, Equatable {
 // MARK: - MacTile Settings
 
 /// All configurable settings for MacTile
-public struct MacTileSettings: Codable, Equatable {
+public struct MacTileSettings: Equatable {
     // MARK: - Grid Configuration
 
     /// List of grid sizes to cycle through with Space key
@@ -507,6 +620,11 @@ public struct MacTileSettings: Codable, Equatable {
     /// Visual appearance settings
     public var appearance: AppearanceSettings
 
+    // MARK: - Virtual Spaces
+
+    /// Virtual spaces storage for window arrangements
+    public var virtualSpaces: VirtualSpacesStorage
+
     // MARK: - Default Values
 
     public static let defaultGridSizes = [
@@ -532,7 +650,8 @@ public struct MacTileSettings: Codable, Equatable {
         overlayKeyboard: .default,
         tilingPresets: [],
         focusPresets: [],
-        appearance: .default
+        appearance: .default,
+        virtualSpaces: VirtualSpacesStorage()
     )
 
     public init(
@@ -550,7 +669,8 @@ public struct MacTileSettings: Codable, Equatable {
         overlayKeyboard: OverlayKeyboardSettings,
         tilingPresets: [TilingPreset],
         focusPresets: [FocusPreset],
-        appearance: AppearanceSettings
+        appearance: AppearanceSettings,
+        virtualSpaces: VirtualSpacesStorage = VirtualSpacesStorage()
     ) {
         self.gridSizes = gridSizes.isEmpty ? Self.defaultGridSizes : gridSizes
         self.windowSpacing = max(0, windowSpacing)
@@ -568,6 +688,63 @@ public struct MacTileSettings: Codable, Equatable {
         self.tilingPresets = Array(tilingPresets.prefix(30))
         self.focusPresets = Array(focusPresets.prefix(30))
         self.appearance = appearance
+        self.virtualSpaces = virtualSpaces
+    }
+}
+
+// MARK: - MacTileSettings Codable (backward compatibility)
+
+extension MacTileSettings: Codable {
+    enum CodingKeys: String, CodingKey {
+        case gridSizes, windowSpacing, insets, autoClose, showMenuBarIcon
+        case launchAtLogin, confirmOnClickWithoutDrag, showHelpText, showMonitorIndicator
+        case toggleOverlayShortcut, secondaryToggleOverlayShortcut, overlayKeyboard
+        case tilingPresets, focusPresets, appearance, virtualSpaces
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        // Required fields
+        gridSizes = try container.decode([GridSize].self, forKey: .gridSizes)
+        windowSpacing = try container.decode(CGFloat.self, forKey: .windowSpacing)
+        insets = try container.decode(EdgeInsets.self, forKey: .insets)
+        autoClose = try container.decode(Bool.self, forKey: .autoClose)
+        showMenuBarIcon = try container.decode(Bool.self, forKey: .showMenuBarIcon)
+        launchAtLogin = try container.decode(Bool.self, forKey: .launchAtLogin)
+        confirmOnClickWithoutDrag = try container.decode(Bool.self, forKey: .confirmOnClickWithoutDrag)
+        showHelpText = try container.decode(Bool.self, forKey: .showHelpText)
+        showMonitorIndicator = try container.decode(Bool.self, forKey: .showMonitorIndicator)
+        toggleOverlayShortcut = try container.decode(KeyboardShortcut.self, forKey: .toggleOverlayShortcut)
+        secondaryToggleOverlayShortcut = try container.decodeIfPresent(KeyboardShortcut.self, forKey: .secondaryToggleOverlayShortcut)
+        overlayKeyboard = try container.decode(OverlayKeyboardSettings.self, forKey: .overlayKeyboard)
+        tilingPresets = try container.decode([TilingPreset].self, forKey: .tilingPresets)
+        focusPresets = try container.decode([FocusPreset].self, forKey: .focusPresets)
+        appearance = try container.decode(AppearanceSettings.self, forKey: .appearance)
+
+        // Optional field for backward compatibility - older settings won't have this
+        virtualSpaces = try container.decodeIfPresent(VirtualSpacesStorage.self, forKey: .virtualSpaces) ?? VirtualSpacesStorage()
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+
+        try container.encode(gridSizes, forKey: .gridSizes)
+        try container.encode(windowSpacing, forKey: .windowSpacing)
+        try container.encode(insets, forKey: .insets)
+        try container.encode(autoClose, forKey: .autoClose)
+        try container.encode(showMenuBarIcon, forKey: .showMenuBarIcon)
+        try container.encode(launchAtLogin, forKey: .launchAtLogin)
+        try container.encode(confirmOnClickWithoutDrag, forKey: .confirmOnClickWithoutDrag)
+        try container.encode(showHelpText, forKey: .showHelpText)
+        try container.encode(showMonitorIndicator, forKey: .showMonitorIndicator)
+        try container.encode(toggleOverlayShortcut, forKey: .toggleOverlayShortcut)
+        try container.encodeIfPresent(secondaryToggleOverlayShortcut, forKey: .secondaryToggleOverlayShortcut)
+        try container.encode(overlayKeyboard, forKey: .overlayKeyboard)
+        try container.encode(tilingPresets, forKey: .tilingPresets)
+        try container.encode(focusPresets, forKey: .focusPresets)
+        try container.encode(appearance, forKey: .appearance)
+        try container.encode(virtualSpaces, forKey: .virtualSpaces)
     }
 }
 

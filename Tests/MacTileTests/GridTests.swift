@@ -432,3 +432,348 @@ final class EdgeInsetsTests: XCTestCase {
         XCTAssertEqual(insets.right, 40)
     }
 }
+
+// MARK: - Visibility Calculator Tests
+
+final class VisibilityCalculatorTests: XCTestCase {
+
+    // MARK: - Basic Visibility Tests
+
+    func testFullyVisibleWindow_NoOccluders() {
+        // A window with no occluders should be 100% visible
+        let window = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let occluders: [CGRect] = []
+
+        let visibility = VisibilityCalculator.calculateVisibilityPercentage(
+            of: window,
+            occludedBy: occluders
+        )
+
+        XCTAssertEqual(visibility, 100.0, accuracy: 1.0)
+    }
+
+    func testFullyOccludedWindow() {
+        // A window completely covered by an occluder should be 0% visible
+        let window = CGRect(x: 100, y: 100, width: 100, height: 100)
+        let occluder = CGRect(x: 50, y: 50, width: 200, height: 200) // Completely covers window
+
+        let visibility = VisibilityCalculator.calculateVisibilityPercentage(
+            of: window,
+            occludedBy: [occluder]
+        )
+
+        XCTAssertEqual(visibility, 0.0, accuracy: 1.0)
+    }
+
+    func testHalfOccludedWindow_LeftHalf() {
+        // Occluder covers left half of window
+        let window = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let occluder = CGRect(x: 0, y: 0, width: 50, height: 100) // Covers left half
+
+        let visibility = VisibilityCalculator.calculateVisibilityPercentage(
+            of: window,
+            occludedBy: [occluder]
+        )
+
+        XCTAssertEqual(visibility, 50.0, accuracy: 5.0) // Allow some grid sampling error
+    }
+
+    func testHalfOccludedWindow_TopHalf() {
+        // Occluder covers top half of window
+        let window = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let occluder = CGRect(x: 0, y: 50, width: 100, height: 50) // Covers top half
+
+        let visibility = VisibilityCalculator.calculateVisibilityPercentage(
+            of: window,
+            occludedBy: [occluder]
+        )
+
+        XCTAssertEqual(visibility, 50.0, accuracy: 5.0)
+    }
+
+    func testQuarterOccludedWindow() {
+        // Occluder covers top-left quarter
+        let window = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let occluder = CGRect(x: 0, y: 50, width: 50, height: 50) // Covers top-left quarter
+
+        let visibility = VisibilityCalculator.calculateVisibilityPercentage(
+            of: window,
+            occludedBy: [occluder]
+        )
+
+        XCTAssertEqual(visibility, 75.0, accuracy: 5.0)
+    }
+
+    // MARK: - Multiple Occluders Tests
+
+    func testMultipleNonOverlappingOccluders() {
+        // Two occluders, each covering 25% of window, not overlapping each other
+        let window = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let occluder1 = CGRect(x: 0, y: 0, width: 50, height: 50)   // Bottom-left quarter
+        let occluder2 = CGRect(x: 50, y: 50, width: 50, height: 50) // Top-right quarter
+
+        let visibility = VisibilityCalculator.calculateVisibilityPercentage(
+            of: window,
+            occludedBy: [occluder1, occluder2]
+        )
+
+        XCTAssertEqual(visibility, 50.0, accuracy: 5.0) // 50% visible (two quarters covered)
+    }
+
+    func testOverlappingOccluders_ShouldNotDoubleCount() {
+        // Two occluders that overlap each other over the target window
+        // This tests that we don't double-count the overlapping region
+        let window = CGRect(x: 0, y: 0, width: 100, height: 100)
+
+        // Occluder 1 covers left 60% (x: 0-60)
+        let occluder1 = CGRect(x: 0, y: 0, width: 60, height: 100)
+        // Occluder 2 covers right 60% (x: 40-100)
+        let occluder2 = CGRect(x: 40, y: 0, width: 60, height: 100)
+
+        // Together they cover 100% (0-60 from occluder1, 60-100 from occluder2)
+        // The overlap region (40-60) should only be counted once
+
+        let visibility = VisibilityCalculator.calculateVisibilityPercentage(
+            of: window,
+            occludedBy: [occluder1, occluder2]
+        )
+
+        // Should be 0% visible (fully covered), not -20% (if we double-counted)
+        XCTAssertEqual(visibility, 0.0, accuracy: 5.0)
+    }
+
+    func testPartiallyOverlappingOccluders() {
+        // Two occluders that partially overlap, leaving some window visible
+        let window = CGRect(x: 0, y: 0, width: 100, height: 100)
+
+        // Occluder 1 covers left 40%
+        let occluder1 = CGRect(x: 0, y: 0, width: 40, height: 100)
+        // Occluder 2 covers middle 40% (overlaps 20% with occluder1)
+        let occluder2 = CGRect(x: 20, y: 0, width: 40, height: 100)
+
+        // Together they cover x: 0-60 (60% of window)
+        // Window visible: x: 60-100 (40% of window)
+
+        let visibility = VisibilityCalculator.calculateVisibilityPercentage(
+            of: window,
+            occludedBy: [occluder1, occluder2]
+        )
+
+        XCTAssertEqual(visibility, 40.0, accuracy: 5.0)
+    }
+
+    // MARK: - Edge Cases
+
+    func testOccluderCompletelyOutsideWindow() {
+        // Occluder doesn't overlap window at all
+        let window = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let occluder = CGRect(x: 200, y: 200, width: 100, height: 100) // Far away
+
+        let visibility = VisibilityCalculator.calculateVisibilityPercentage(
+            of: window,
+            occludedBy: [occluder]
+        )
+
+        XCTAssertEqual(visibility, 100.0, accuracy: 1.0)
+    }
+
+    func testOccluderPartiallyOutsideWindow() {
+        // Occluder extends beyond window bounds - only intersection counts
+        let window = CGRect(x: 50, y: 50, width: 100, height: 100)
+        // Occluder starts at origin, covers bottom-left quarter of window
+        let occluder = CGRect(x: 0, y: 0, width: 100, height: 100)
+
+        // Intersection: (50,50) to (100,100) = 50x50 = 25% of window
+
+        let visibility = VisibilityCalculator.calculateVisibilityPercentage(
+            of: window,
+            occludedBy: [occluder]
+        )
+
+        XCTAssertEqual(visibility, 75.0, accuracy: 5.0)
+    }
+
+    func testOccluderMuchLargerThanWindow() {
+        // Very large occluder that completely engulfs window
+        let window = CGRect(x: 100, y: 100, width: 50, height: 50)
+        let occluder = CGRect(x: 0, y: 0, width: 1000, height: 1000)
+
+        let visibility = VisibilityCalculator.calculateVisibilityPercentage(
+            of: window,
+            occludedBy: [occluder]
+        )
+
+        XCTAssertEqual(visibility, 0.0, accuracy: 1.0)
+    }
+
+    // MARK: - Threshold Tests (40% visibility)
+
+    func testVisibility30Percent_BelowThreshold() {
+        // Window is ~30% visible - should be clearly below 40% threshold
+        let window = CGRect(x: 0, y: 0, width: 100, height: 100)
+        // Cover 70% of window (left 70 pixels)
+        let occluder = CGRect(x: 0, y: 0, width: 70, height: 100)
+
+        let visibility = VisibilityCalculator.calculateVisibilityPercentage(
+            of: window,
+            occludedBy: [occluder]
+        )
+
+        XCTAssertLessThan(visibility, 40.0, "30% visible should be below 40% threshold")
+    }
+
+    func testVisibility50Percent_AboveThreshold() {
+        // Window is 50% visible - should be clearly above 40% threshold
+        let window = CGRect(x: 0, y: 0, width: 100, height: 100)
+        // Cover 50% of window (left half)
+        let occluder = CGRect(x: 0, y: 0, width: 50, height: 100)
+
+        let visibility = VisibilityCalculator.calculateVisibilityPercentage(
+            of: window,
+            occludedBy: [occluder]
+        )
+
+        XCTAssertGreaterThan(visibility, 40.0, "50% visible should be above 40% threshold")
+    }
+
+    func testVisibilityNearThreshold_35Percent() {
+        // Window is ~35% visible - should be below 40% threshold
+        let window = CGRect(x: 0, y: 0, width: 100, height: 100)
+        // Cover 65% of window
+        let occluder = CGRect(x: 0, y: 0, width: 65, height: 100)
+
+        let visibility = VisibilityCalculator.calculateVisibilityPercentage(
+            of: window,
+            occludedBy: [occluder]
+        )
+
+        XCTAssertLessThan(visibility, 40.0, "35% visible should be below 40% threshold")
+    }
+
+    func testVisibilityNearThreshold_45Percent() {
+        // Window is ~45% visible - should be above 40% threshold
+        let window = CGRect(x: 0, y: 0, width: 100, height: 100)
+        // Cover 55% of window
+        let occluder = CGRect(x: 0, y: 0, width: 55, height: 100)
+
+        let visibility = VisibilityCalculator.calculateVisibilityPercentage(
+            of: window,
+            occludedBy: [occluder]
+        )
+
+        XCTAssertGreaterThan(visibility, 40.0, "45% visible should be above 40% threshold")
+    }
+
+    // MARK: - Real-World Scenario Tests
+
+    func testSideBySideWindows_BothFullyVisible() {
+        // Two windows side by side - neither occludes the other
+        let leftWindow = CGRect(x: 0, y: 0, width: 500, height: 1000)
+        let rightWindow = CGRect(x: 500, y: 0, width: 500, height: 1000)
+
+        // Left window visibility (right window doesn't occlude it)
+        let leftVisibility = VisibilityCalculator.calculateVisibilityPercentage(
+            of: leftWindow,
+            occludedBy: [rightWindow]
+        )
+
+        // Right window visibility (left window doesn't occlude it)
+        let rightVisibility = VisibilityCalculator.calculateVisibilityPercentage(
+            of: rightWindow,
+            occludedBy: [leftWindow]
+        )
+
+        XCTAssertEqual(leftVisibility, 100.0, accuracy: 1.0)
+        XCTAssertEqual(rightVisibility, 100.0, accuracy: 1.0)
+    }
+
+    func testFloatingFinderWindow_PartialOcclusion() {
+        // Terminal on left, Finder floating on top (partially covering terminal)
+        let terminal = CGRect(x: 0, y: 0, width: 500, height: 1000)
+        let finder = CGRect(x: 200, y: 300, width: 300, height: 400) // Floating over terminal
+
+        // Finder covers 300x400 = 120,000 of terminal's 500x1000 = 500,000
+        // That's 24% covered, so 76% visible
+
+        let terminalVisibility = VisibilityCalculator.calculateVisibilityPercentage(
+            of: terminal,
+            occludedBy: [finder]
+        )
+
+        XCTAssertEqual(terminalVisibility, 76.0, accuracy: 5.0)
+    }
+
+    func testCascadedWindows() {
+        // Three cascaded windows (like when you Cmd+` through windows)
+        let backWindow = CGRect(x: 0, y: 0, width: 800, height: 600)
+        let middleWindow = CGRect(x: 50, y: 50, width: 800, height: 600)
+        let frontWindow = CGRect(x: 100, y: 100, width: 800, height: 600)
+
+        // Back window is occluded by both middle and front
+        // Middle window is only occluded by front
+        // Front window is not occluded
+
+        let backVisibility = VisibilityCalculator.calculateVisibilityPercentage(
+            of: backWindow,
+            occludedBy: [middleWindow, frontWindow]
+        )
+
+        let middleVisibility = VisibilityCalculator.calculateVisibilityPercentage(
+            of: middleWindow,
+            occludedBy: [frontWindow]
+        )
+
+        let frontVisibility = VisibilityCalculator.calculateVisibilityPercentage(
+            of: frontWindow,
+            occludedBy: []
+        )
+
+        // Back window: visible region is roughly the L-shaped area not covered
+        // Should be relatively low visibility
+        XCTAssertLessThan(backVisibility, 30.0)
+
+        // Middle window: similar L-shaped visible region
+        XCTAssertLessThan(middleVisibility, 30.0)
+
+        // Front window: fully visible
+        XCTAssertEqual(frontVisibility, 100.0, accuracy: 1.0)
+    }
+
+    // MARK: - Filter Function Tests
+
+    func testFilterWindowsByVisibility_KeepsVisibleWindows() {
+        // Create a list of window frames with their z-indices
+        // Windows with lower index are in front
+        let windows: [(frame: CGRect, zIndex: Int)] = [
+            (CGRect(x: 0, y: 0, width: 500, height: 500), 0),      // Front - 100% visible
+            (CGRect(x: 500, y: 0, width: 500, height: 500), 1),    // Side - 100% visible
+            (CGRect(x: 250, y: 250, width: 500, height: 500), 2),  // Back - partially covered
+        ]
+
+        let visibleIndices = VisibilityCalculator.filterByVisibility(
+            windows: windows,
+            minimumVisibility: 40.0
+        )
+
+        // First two should definitely be included (100% visible)
+        XCTAssertTrue(visibleIndices.contains(0))
+        XCTAssertTrue(visibleIndices.contains(1))
+        // Third might or might not be included depending on exact coverage
+    }
+
+    func testFilterWindowsByVisibility_ExcludesHiddenWindows() {
+        // Window completely behind another
+        let windows: [(frame: CGRect, zIndex: Int)] = [
+            (CGRect(x: 0, y: 0, width: 1000, height: 1000), 0),   // Front - covers everything
+            (CGRect(x: 100, y: 100, width: 200, height: 200), 1), // Back - completely hidden
+        ]
+
+        let visibleIndices = VisibilityCalculator.filterByVisibility(
+            windows: windows,
+            minimumVisibility: 40.0
+        )
+
+        XCTAssertTrue(visibleIndices.contains(0))  // Front window visible
+        XCTAssertFalse(visibleIndices.contains(1)) // Back window hidden
+    }
+}

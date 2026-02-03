@@ -3,14 +3,18 @@ import MacTileCore
 import HotKey
 
 /// Main application delegate for MacTile
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, VirtualSpaceManagerDelegate {
     private var statusItem: NSStatusItem?
     private var hotKey: HotKey?
     private var secondaryHotKey: HotKey?
     private var focusHotKeys: [HotKey] = []  // Global hotkeys for focus presets
+    private var virtualSpaceHotKeys: [HotKey] = []  // Global hotkeys for virtual spaces
     private var overlayController: OverlayWindowController?
     private var settingsController: SettingsWindowController?
     private var settingsObserver: NSObjectProtocol?
+
+    // Virtual space rename panel
+    private var renamePanel: NSPanel?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         print("MacTile launched")
@@ -29,6 +33,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Register focus preset hotkeys
         setupFocusHotKeys()
+
+        // Register virtual space hotkeys
+        setupVirtualSpaceHotKeys()
+
+        // Set up virtual space manager delegate
+        VirtualSpaceManager.shared.delegate = self
 
         // Sync launch at login with system state
         syncLaunchAtLogin()
@@ -61,6 +71,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Re-register focus preset hotkeys
         setupFocusHotKeys()
+
+        // Re-register virtual space hotkeys
+        setupVirtualSpaceHotKeys()
 
         // Update status item visibility
         let settings = SettingsManager.shared.settings
@@ -279,6 +292,163 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         print("Registered \(focusHotKeys.count) focus hotkeys")
+    }
+
+    private func setupVirtualSpaceHotKeys() {
+        // Clear existing virtual space hotkeys
+        virtualSpaceHotKeys.removeAll()
+
+        // Key codes for numbers 1-9
+        // 1=18, 2=19, 3=20, 4=21, 5=23, 6=22, 7=26, 8=28, 9=25
+        let numberKeys: [(keyCode: UInt16, key: Key, number: Int)] = [
+            (18, .one, 1),
+            (19, .two, 2),
+            (20, .three, 3),
+            (21, .four, 4),
+            (23, .five, 5),
+            (22, .six, 6),
+            (26, .seven, 7),
+            (28, .eight, 8),
+            (25, .nine, 9)
+        ]
+
+        for (_, key, spaceNumber) in numberKeys {
+            // Restore: Control+Option+N
+            let restoreKey = HotKey(key: key, modifiers: [.control, .option])
+            restoreKey.keyDownHandler = { [weak self] in
+                self?.restoreVirtualSpace(number: spaceNumber)
+            }
+            virtualSpaceHotKeys.append(restoreKey)
+
+            // Save: Control+Option+Shift+N
+            let saveKey = HotKey(key: key, modifiers: [.control, .option, .shift])
+            saveKey.keyDownHandler = { [weak self] in
+                self?.saveToVirtualSpace(number: spaceNumber)
+            }
+            virtualSpaceHotKeys.append(saveKey)
+        }
+
+        // Rename: Control+Option+Comma (keyCode 43)
+        let renameKey = HotKey(key: .comma, modifiers: [.control, .option])
+        renameKey.keyDownHandler = { [weak self] in
+            self?.renameActiveVirtualSpace()
+        }
+        virtualSpaceHotKeys.append(renameKey)
+
+        print("Registered \(virtualSpaceHotKeys.count) virtual space hotkeys")
+    }
+
+    // MARK: - Virtual Space Actions
+
+    private func saveToVirtualSpace(number: Int) {
+        // Get the currently focused screen
+        let displayID = getCurrentDisplayID()
+        VirtualSpaceManager.shared.saveToSpace(number: number, forMonitor: displayID)
+    }
+
+    private func restoreVirtualSpace(number: Int) {
+        // Get the currently focused screen
+        let displayID = getCurrentDisplayID()
+        VirtualSpaceManager.shared.restoreFromSpace(number: number, forMonitor: displayID)
+    }
+
+    private func renameActiveVirtualSpace() {
+        // Get the currently focused screen
+        let displayID = getCurrentDisplayID()
+
+        guard VirtualSpaceManager.shared.isSpaceActive(forMonitor: displayID) else {
+            print("[VirtualSpaces] No active space to rename")
+            return
+        }
+
+        // Show rename dialog
+        showRenameDialog(forMonitor: displayID)
+    }
+
+    private func getCurrentDisplayID() -> UInt32 {
+        // Get the screen with the currently focused window
+        if let focusedWindow = RealWindowManager.shared.getFocusedWindow() {
+            let center = CGPoint(
+                x: focusedWindow.frame.midX,
+                y: focusedWindow.frame.midY
+            )
+            return VirtualSpaceManager.displayIDForPoint(center)
+        }
+
+        // Fall back to main screen
+        guard let mainScreen = NSScreen.main else {
+            return VirtualSpaceManager.displayID(for: NSScreen.screens[0])
+        }
+        return VirtualSpaceManager.displayID(for: mainScreen)
+    }
+
+    private func showRenameDialog(forMonitor displayID: UInt32) {
+        guard let space = VirtualSpaceManager.shared.getActiveSpace(forMonitor: displayID) else {
+            return
+        }
+
+        // Use NSAlert with text field for simple input
+        let alert = NSAlert()
+        alert.messageText = "Rename Virtual Space \(space.number)"
+        alert.informativeText = "Enter a name for this virtual space:"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
+        textField.stringValue = space.name ?? ""
+        textField.placeholderString = "Space \(space.number)"
+        alert.accessoryView = textField
+
+        // Make text field first responder
+        alert.window.initialFirstResponder = textField
+
+        NSApp.activate(ignoringOtherApps: true)
+        let response = alert.runModal()
+
+        if response == .alertFirstButtonReturn {
+            let newName = textField.stringValue.trimmingCharacters(in: .whitespaces)
+            VirtualSpaceManager.shared.renameActiveSpace(name: newName, forMonitor: displayID)
+        }
+    }
+
+    // MARK: - VirtualSpaceManagerDelegate
+
+    func virtualSpaceDidBecomeActive(_ space: VirtualSpace, forMonitor displayID: UInt32) {
+        // Update menubar to show space name
+        updateMenuBarForVirtualSpace(space)
+    }
+
+    func virtualSpaceDidBecomeInactive(forMonitor displayID: UInt32) {
+        // Check if any space is still active
+        let anyActive = NSScreen.screens.contains { screen in
+            let id = VirtualSpaceManager.displayID(for: screen)
+            return VirtualSpaceManager.shared.isSpaceActive(forMonitor: id)
+        }
+
+        if !anyActive {
+            // Restore normal menubar
+            updateMenuBarForVirtualSpace(nil)
+        }
+    }
+
+    private func updateMenuBarForVirtualSpace(_ space: VirtualSpace?) {
+        guard let button = statusItem?.button else { return }
+
+        if let space = space {
+            // Show space name in menubar
+            button.title = space.displayName
+            button.image = nil
+        } else {
+            // Restore normal icon
+            button.title = ""
+            if let image = NSImage(systemSymbolName: "square.grid.3x3", accessibilityDescription: "MacTile") {
+                image.isTemplate = true
+                button.image = image
+            } else {
+                button.title = "MT"
+            }
+        }
     }
 
     private func createHotKey(from shortcut: KeyboardShortcut) -> HotKey? {
