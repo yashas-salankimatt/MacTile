@@ -393,13 +393,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, VirtualSpaceManagerDelegate 
         // Get the currently focused screen
         let displayID = getCurrentDisplayID()
 
-        guard VirtualSpaceManager.shared.isSpaceActive(forMonitor: displayID) else {
+        guard let space = VirtualSpaceManager.shared.getActiveSpace(forMonitor: displayID) else {
             print("[VirtualSpaces] No active space to rename")
             return
         }
 
         // Show rename dialog
-        showRenameDialog(forMonitor: displayID)
+        showRenameDialog(forMonitor: displayID, spaceNumber: space.number, currentName: space.name)
     }
 
     private func getCurrentDisplayID() -> UInt32 {
@@ -419,22 +419,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, VirtualSpaceManagerDelegate 
         return VirtualSpaceManager.displayID(for: mainScreen)
     }
 
-    private func showRenameDialog(forMonitor displayID: UInt32) {
-        guard let space = VirtualSpaceManager.shared.getActiveSpace(forMonitor: displayID) else {
-            return
-        }
-
+    private func showRenameDialog(forMonitor displayID: UInt32, spaceNumber: Int, currentName: String?) {
         // Use NSAlert with text field for simple input
         let alert = NSAlert()
-        alert.messageText = "Rename Virtual Space \(space.number)"
+        alert.messageText = "Rename Virtual Space \(spaceNumber)"
         alert.informativeText = "Enter a name for this virtual space:"
         alert.alertStyle = .informational
         alert.addButton(withTitle: "OK")
         alert.addButton(withTitle: "Cancel")
 
         let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 250, height: 24))
-        textField.stringValue = space.name ?? ""
-        textField.placeholderString = "Space \(space.number)"
+        textField.stringValue = currentName ?? ""
+        textField.placeholderString = "Space \(spaceNumber)"
         alert.accessoryView = textField
 
         // Make text field first responder
@@ -445,7 +441,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, VirtualSpaceManagerDelegate 
 
         if response == .alertFirstButtonReturn {
             let newName = textField.stringValue.trimmingCharacters(in: .whitespaces)
-            VirtualSpaceManager.shared.renameActiveSpace(name: newName, forMonitor: displayID)
+            VirtualSpaceManager.shared.renameSpace(number: spaceNumber, name: newName, forMonitor: displayID)
         }
     }
 

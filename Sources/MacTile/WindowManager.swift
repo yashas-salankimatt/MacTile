@@ -108,6 +108,14 @@ class RealWindowManager: WindowManagerProtocol {
             return false
         }
 
+        return setAXWindowFrame(realWindow.axWindow, frame: frame)
+    }
+
+    /// Set the frame of an AXUIElement window.
+    /// This is the shared implementation used by both WindowManager and VirtualSpaceManager.
+    /// The frame should be in NSScreen coordinates (bottom-left origin).
+    @discardableResult
+    func setAXWindowFrame(_ axWindow: AXUIElement, frame: CGRect) -> Bool {
         // Use primary screen for AX coordinate conversion
         // AX coordinates have origin at top-left of the PRIMARY display (with menu bar)
         // NSScreen.main returns the screen with keyboard focus, which may not be the primary
@@ -132,7 +140,7 @@ class RealWindowManager: WindowManagerProtocol {
         print("[WindowManager] Primary screen height: \(screenHeight)")
 
         // Read current window state before changes
-        let beforeState = readWindowState(realWindow.axWindow)
+        let beforeState = readWindowState(axWindow)
         print("[WindowManager] BEFORE - Position: \(beforeState.position), Size: \(beforeState.size)")
 
         // Detect if this is a cross-monitor move
@@ -171,7 +179,7 @@ class RealWindowManager: WindowManagerProtocol {
             print("[WindowManager] Step 1: Shrinking to intermediate size \(smallSize)")
             var size = smallSize
             if let sizeValue = AXValueCreate(.cgSize, &size) {
-                AXUIElementSetAttributeValue(realWindow.axWindow, kAXSizeAttribute as CFString, sizeValue)
+                AXUIElementSetAttributeValue(axWindow, kAXSizeAttribute as CFString, sizeValue)
             }
             usleep(50000) // 50ms - give window time to shrink
 
@@ -179,7 +187,7 @@ class RealWindowManager: WindowManagerProtocol {
             print("[WindowManager] Step 2: Moving to target position \(targetPosition)")
             var position = targetPosition
             if let posValue = AXValueCreate(.cgPoint, &position) {
-                AXUIElementSetAttributeValue(realWindow.axWindow, kAXPositionAttribute as CFString, posValue)
+                AXUIElementSetAttributeValue(axWindow, kAXPositionAttribute as CFString, posValue)
             }
             usleep(50000) // 50ms - give window time to move across monitors
 
@@ -187,14 +195,14 @@ class RealWindowManager: WindowManagerProtocol {
             print("[WindowManager] Step 3: Resizing to final size \(targetSize)")
             size = targetSize
             if let sizeValue = AXValueCreate(.cgSize, &size) {
-                AXUIElementSetAttributeValue(realWindow.axWindow, kAXSizeAttribute as CFString, sizeValue)
+                AXUIElementSetAttributeValue(axWindow, kAXSizeAttribute as CFString, sizeValue)
             }
             usleep(50000) // 50ms
 
             // Step 4: Correct position (resize may have shifted it)
             print("[WindowManager] Step 4: Correcting position to \(targetPosition)")
             if let posValue = AXValueCreate(.cgPoint, &position) {
-                AXUIElementSetAttributeValue(realWindow.axWindow, kAXPositionAttribute as CFString, posValue)
+                AXUIElementSetAttributeValue(axWindow, kAXPositionAttribute as CFString, posValue)
             }
             usleep(30000) // 30ms
 
@@ -213,7 +221,7 @@ class RealWindowManager: WindowManagerProtocol {
                 var safePosition = CGPoint(x: screenLeftEdge, y: beforeState.position.y)
                 print("[WindowManager] Step 1: Moving to safe position \(safePosition) first")
                 if let posValue = AXValueCreate(.cgPoint, &safePosition) {
-                    AXUIElementSetAttributeValue(realWindow.axWindow, kAXPositionAttribute as CFString, posValue)
+                    AXUIElementSetAttributeValue(axWindow, kAXPositionAttribute as CFString, posValue)
                 }
                 usleep(30000) // 30ms - give window time to move
             }
@@ -222,7 +230,7 @@ class RealWindowManager: WindowManagerProtocol {
             print("[WindowManager] Step 2: Setting initial size to \(targetSize)")
             var size = targetSize
             if let sizeValue = AXValueCreate(.cgSize, &size) {
-                AXUIElementSetAttributeValue(realWindow.axWindow, kAXSizeAttribute as CFString, sizeValue)
+                AXUIElementSetAttributeValue(axWindow, kAXSizeAttribute as CFString, sizeValue)
             }
             usleep(40000) // 40ms
 
@@ -230,7 +238,7 @@ class RealWindowManager: WindowManagerProtocol {
             print("[WindowManager] Step 3: Setting position to \(targetPosition)")
             var position = targetPosition
             if let posValue = AXValueCreate(.cgPoint, &position) {
-                AXUIElementSetAttributeValue(realWindow.axWindow, kAXPositionAttribute as CFString, posValue)
+                AXUIElementSetAttributeValue(axWindow, kAXPositionAttribute as CFString, posValue)
             }
             usleep(30000) // 30ms
         }
@@ -244,11 +252,11 @@ class RealWindowManager: WindowManagerProtocol {
         let maxCorrectionAttempts = 10
         var positionOK = false
         var sizeOK = false
-        var lastState = readWindowState(realWindow.axWindow)
+        var lastState = readWindowState(axWindow)
         var stuckCount = 0
 
         for attempt in 1...maxCorrectionAttempts {
-            let state = readWindowState(realWindow.axWindow)
+            let state = readWindowState(axWindow)
 
             // Check position accuracy using ResizeStateChecker
             positionOK = ResizeStateChecker.isPositionOK(actual: state.position, target: targetPosition)
@@ -287,32 +295,32 @@ class RealWindowManager: WindowManagerProtocol {
             // Set size first
             var sz = targetSize
             if let sizeValue = AXValueCreate(.cgSize, &sz) {
-                AXUIElementSetAttributeValue(realWindow.axWindow, kAXSizeAttribute as CFString, sizeValue)
+                AXUIElementSetAttributeValue(axWindow, kAXSizeAttribute as CFString, sizeValue)
             }
             usleep(30000) // 30ms
 
             // Then set position
             var pos = targetPosition
             if let posValue = AXValueCreate(.cgPoint, &pos) {
-                AXUIElementSetAttributeValue(realWindow.axWindow, kAXPositionAttribute as CFString, posValue)
+                AXUIElementSetAttributeValue(axWindow, kAXPositionAttribute as CFString, posValue)
             }
             usleep(25000)
 
             // Set size again (position change can affect size)
             if let sizeValue = AXValueCreate(.cgSize, &sz) {
-                AXUIElementSetAttributeValue(realWindow.axWindow, kAXSizeAttribute as CFString, sizeValue)
+                AXUIElementSetAttributeValue(axWindow, kAXSizeAttribute as CFString, sizeValue)
             }
             usleep(25000)
 
             // Final position adjustment (size change can affect position)
             if let posValue = AXValueCreate(.cgPoint, &pos) {
-                AXUIElementSetAttributeValue(realWindow.axWindow, kAXPositionAttribute as CFString, posValue)
+                AXUIElementSetAttributeValue(axWindow, kAXPositionAttribute as CFString, posValue)
             }
             usleep(20000)
         }
 
         // Read final state and check using ResizeStateChecker
-        let finalState = readWindowState(realWindow.axWindow)
+        let finalState = readWindowState(axWindow)
         positionOK = ResizeStateChecker.isPositionOK(actual: finalState.position, target: targetPosition)
         sizeOK = ResizeStateChecker.isSizeOK(actual: finalState.size, target: targetSize)
 

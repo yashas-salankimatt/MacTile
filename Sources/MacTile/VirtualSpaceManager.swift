@@ -108,16 +108,28 @@ class VirtualSpaceManager {
             return
         }
 
+        renameSpace(number: spaceNumber, name: name, forMonitor: displayID)
+    }
+
+    /// Rename a specific virtual space for a monitor (does not require it to be active)
+    func renameSpace(number: Int, name: String, forMonitor displayID: UInt32) {
+        guard var space = SettingsManager.shared.settings.virtualSpaces.getSpace(displayID: displayID, number: number) else {
+            print("[VirtualSpaces] Space \(number) not found for monitor \(displayID)")
+            return
+        }
+
         space.name = name.isEmpty ? nil : name
 
         var storage = SettingsManager.shared.settings.virtualSpaces
         storage.setSpace(space, displayID: displayID)
         SettingsManager.shared.saveVirtualSpacesQuietly(storage)
 
-        // Notify delegate of updated space
-        delegate?.virtualSpaceDidBecomeActive(space, forMonitor: displayID)
+        // Notify delegate if this space is currently active
+        if activeSpaces[displayID] == number {
+            delegate?.virtualSpaceDidBecomeActive(space, forMonitor: displayID)
+        }
 
-        print("[VirtualSpaces] Renamed space \(spaceNumber) to '\(name)'")
+        print("[VirtualSpaces] Renamed space \(number) to '\(name)'")
     }
 
     /// Get the active virtual space for a monitor
@@ -461,22 +473,16 @@ class VirtualSpaceManager {
         return CGRect(x: position.x, y: convertedY, width: size.width, height: size.height)
     }
 
-    /// Set the frame of an AX window
+    /// Set the frame of an AX window using the shared WindowManager implementation.
+    /// This ensures consistent window positioning behavior with retry logic and
+    /// proper handling of cross-monitor moves and async AX API behavior.
     private func setWindowFrame(_ axWindow: AXUIElement, frame: CGRect) {
-        // Convert from screen coordinates (bottom-left origin) to AX coordinates (top-left origin)
-        // Both coordinate systems use the primary screen as reference, so this works for all monitors
-        let axY = self.primaryScreenHeight - frame.origin.y - frame.height
-
-        var position = CGPoint(x: frame.origin.x, y: axY)
-        var size = CGSize(width: frame.width, height: frame.height)
-
-        if let posValue = AXValueCreate(.cgPoint, &position) {
-            AXUIElementSetAttributeValue(axWindow, kAXPositionAttribute as CFString, posValue)
-        }
-
-        if let sizeValue = AXValueCreate(.cgSize, &size) {
-            AXUIElementSetAttributeValue(axWindow, kAXSizeAttribute as CFString, sizeValue)
-        }
+        // Delegate to RealWindowManager's shared implementation which handles:
+        // - Coordinate conversion
+        // - Cross-monitor vs same-screen strategies
+        // - Retry loops for async AX API
+        // - Minimum window size constraints
+        RealWindowManager.shared.setAXWindowFrame(axWindow, frame: frame)
     }
 
     // MARK: - Active State Management
