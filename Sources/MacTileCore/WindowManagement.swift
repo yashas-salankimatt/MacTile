@@ -128,6 +128,56 @@ public class MockWindowManager: WindowManagerProtocol {
     }
 }
 
+// MARK: - Resize State Checker
+
+/// Utility for checking if a resize operation was successful
+/// Used to determine if a window achieved its target size/position
+public struct ResizeStateChecker {
+    /// Default tolerance for size/position comparisons (in pixels)
+    public static let defaultTolerance: CGFloat = 10
+
+    /// Threshold for detecting when a dimension "exceeds" the target
+    public static let exceedsThreshold: CGFloat = 5
+
+    /// Check if actual size is within tolerance of target
+    public static func isSizeOK(actual: CGSize, target: CGSize, tolerance: CGFloat = defaultTolerance) -> Bool {
+        let widthOK = abs(actual.width - target.width) < tolerance
+        let heightOK = abs(actual.height - target.height) < tolerance
+        return widthOK && heightOK
+    }
+
+    /// Check if actual position is within tolerance of target
+    public static func isPositionOK(actual: CGPoint, target: CGPoint, tolerance: CGFloat = defaultTolerance) -> Bool {
+        let xOK = abs(actual.x - target.x) < tolerance
+        let yOK = abs(actual.y - target.y) < tolerance
+        return xOK && yOK
+    }
+
+    /// Check if the size exceeds target in a way that indicates a minimum constraint
+    ///
+    /// A TRUE minimum constraint is when:
+    /// - Size exceeds in one or both dimensions, AND
+    /// - Doesn't fall short in either dimension
+    ///
+    /// This distinguishes between:
+    /// - Browser with minimum width of 500 when we asked for 400 (true constraint)
+    /// - Browser fighting with us during resize causing temporary mismatches (not a constraint)
+    public static func isMinimumConstraint(actual: CGSize, target: CGSize, tolerance: CGFloat = defaultTolerance) -> Bool {
+        let widthExceeds = actual.width > target.width + exceedsThreshold
+        let heightExceeds = actual.height > target.height + exceedsThreshold
+        let widthShort = actual.width < target.width - tolerance
+        let heightShort = actual.height < target.height - tolerance
+
+        return (widthExceeds || heightExceeds) && !widthShort && !heightShort
+    }
+
+    /// Check if both size and position are within tolerance
+    public static func isFrameOK(actualFrame: CGRect, targetFrame: CGRect, tolerance: CGFloat = defaultTolerance) -> Bool {
+        return isSizeOK(actual: actualFrame.size, target: targetFrame.size, tolerance: tolerance) &&
+               isPositionOK(actual: actualFrame.origin, target: targetFrame.origin, tolerance: tolerance)
+    }
+}
+
 // MARK: - Window Tiler
 
 /// Handles the logic of tiling windows based on grid selections

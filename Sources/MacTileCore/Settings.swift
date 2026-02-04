@@ -404,6 +404,20 @@ public struct VirtualSpaceWindow: Codable, Equatable {
         self.frame = frame
         self.zIndex = zIndex
     }
+
+    /// Comparison function for restore order (back to front).
+    /// When restoring, we raise windows from back (high zIndex) to front (low zIndex)
+    /// so the topmost window ends up on top.
+    /// This is the canonical sorting logic used by VirtualSpaceManager.restoreWindows().
+    public static func restoreOrderComparator(_ lhs: VirtualSpaceWindow, _ rhs: VirtualSpaceWindow) -> Bool {
+        return lhs.zIndex > rhs.zIndex
+    }
+
+    /// Comparison function for z-order (front to back).
+    /// zIndex 0 = topmost/frontmost, higher values = further back.
+    public static func zOrderComparator(_ lhs: VirtualSpaceWindow, _ rhs: VirtualSpaceWindow) -> Bool {
+        return lhs.zIndex < rhs.zIndex
+    }
 }
 
 // MARK: - Virtual Space
@@ -430,6 +444,20 @@ public struct VirtualSpace: Codable, Equatable {
     /// Whether this space has any saved windows
     public var isEmpty: Bool {
         return windows.isEmpty
+    }
+
+    /// Returns windows sorted in the order they should be restored (back to front)
+    /// When restoring, we raise windows from back to front so the final z-order is correct.
+    /// Windows with higher zIndex (further back) should be restored first.
+    /// Uses VirtualSpaceWindow.restoreOrderComparator - the same logic used by VirtualSpaceManager.
+    public var windowsInRestoreOrder: [VirtualSpaceWindow] {
+        return windows.sorted(by: VirtualSpaceWindow.restoreOrderComparator)
+    }
+
+    /// Returns windows sorted by z-order (front to back, zIndex 0 = topmost)
+    /// Uses VirtualSpaceWindow.zOrderComparator.
+    public var windowsByZOrder: [VirtualSpaceWindow] {
+        return windows.sorted(by: VirtualSpaceWindow.zOrderComparator)
     }
 
     public init(

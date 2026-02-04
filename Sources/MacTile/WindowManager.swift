@@ -250,13 +250,11 @@ class RealWindowManager: WindowManagerProtocol {
         for attempt in 1...maxCorrectionAttempts {
             let state = readWindowState(realWindow.axWindow)
 
-            // Check position accuracy
-            positionOK = abs(state.position.x - targetPosition.x) < 10 && abs(state.position.y - targetPosition.y) < 10
+            // Check position accuracy using ResizeStateChecker
+            positionOK = ResizeStateChecker.isPositionOK(actual: state.position, target: targetPosition)
 
-            // Check size accuracy
-            let widthOK = abs(state.size.width - targetSize.width) < 10
-            let heightOK = abs(state.size.height - targetSize.height) < 10
-            sizeOK = widthOK && heightOK
+            // Check size accuracy using ResizeStateChecker
+            sizeOK = ResizeStateChecker.isSizeOK(actual: state.size, target: targetSize)
 
             if positionOK && sizeOK {
                 print("[WindowManager]   Attempt \(attempt): Both position and size OK")
@@ -268,13 +266,8 @@ class RealWindowManager: WindowManagerProtocol {
             if state.position == lastState.position && state.size == lastState.size {
                 stuckCount += 1
                 if stuckCount >= 3 {
-                    // Now check if this looks like a minimum constraint
-                    let widthExceeds = state.size.width > targetSize.width + 5
-                    let heightExceeds = state.size.height > targetSize.height + 5
-                    let widthShort = state.size.width < targetSize.width - 10
-                    let heightShort = state.size.height < targetSize.height - 10
-
-                    if (widthExceeds || heightExceeds) && !widthShort && !heightShort {
+                    // Now check if this looks like a minimum constraint using ResizeStateChecker
+                    if ResizeStateChecker.isMinimumConstraint(actual: state.size, target: targetSize) {
                         print("[WindowManager]   Attempt \(attempt): Stuck at minimum constraint (w:\(state.size.width) vs \(targetSize.width), h:\(state.size.height) vs \(targetSize.height))")
                         sizeOK = true // Accept this as the best we can do
                         break
@@ -318,10 +311,10 @@ class RealWindowManager: WindowManagerProtocol {
             usleep(20000)
         }
 
-        // Read final state
+        // Read final state and check using ResizeStateChecker
         let finalState = readWindowState(realWindow.axWindow)
-        positionOK = abs(finalState.position.x - targetPosition.x) < 10 && abs(finalState.position.y - targetPosition.y) < 10
-        sizeOK = abs(finalState.size.width - targetSize.width) < 10 && abs(finalState.size.height - targetSize.height) < 10
+        positionOK = ResizeStateChecker.isPositionOK(actual: finalState.position, target: targetPosition)
+        sizeOK = ResizeStateChecker.isSizeOK(actual: finalState.size, target: targetSize)
 
         print("[WindowManager] FINAL - Position: \(finalState.position), Size: \(finalState.size)")
 
@@ -389,16 +382,15 @@ class RealWindowManager: WindowManagerProtocol {
             // Read back the actual size
             actualSize = readWindowState(axWindow).size
 
-            // Check if we achieved the target size (within tolerance)
-            let widthOK = abs(actualSize.width - targetSize.width) < 10
-            let heightOK = abs(actualSize.height - targetSize.height) < 10
-
-            if widthOK && heightOK {
+            // Check if we achieved the target size using ResizeStateChecker
+            if ResizeStateChecker.isSizeOK(actual: actualSize, target: targetSize) {
                 return (actualSize, attempt)
             }
 
-            // If size is LARGER than target, it's likely a minimum size constraint - don't retry
-            if actualSize.width > targetSize.width + 5 || actualSize.height > targetSize.height + 5 {
+            // If size exceeds target, it's likely a minimum size constraint - don't retry
+            // Use a simplified check here (any dimension exceeding is enough to stop)
+            if actualSize.width > targetSize.width + ResizeStateChecker.exceedsThreshold ||
+               actualSize.height > targetSize.height + ResizeStateChecker.exceedsThreshold {
                 print("[WindowManager]     Size exceeded target (likely minimum constraint), not retrying")
                 return (actualSize, attempt)
             }
@@ -429,11 +421,8 @@ class RealWindowManager: WindowManagerProtocol {
             // Read back the actual position
             actualPosition = readWindowState(axWindow).position
 
-            // Check if we achieved the target position (within tolerance)
-            let xOK = abs(actualPosition.x - targetPosition.x) < 10
-            let yOK = abs(actualPosition.y - targetPosition.y) < 10
-
-            if xOK && yOK {
+            // Check if we achieved the target position using ResizeStateChecker
+            if ResizeStateChecker.isPositionOK(actual: actualPosition, target: targetPosition) {
                 return (actualPosition, attempt)
             }
 

@@ -347,59 +347,106 @@ final class MacTileSettingsVirtualSpacesTests: XCTestCase {
 
 // MARK: - VirtualSpace Z-Order Tests
 
+/// Tests for VirtualSpaceWindow comparators and VirtualSpace z-order properties.
+/// VirtualSpaceManager.restoreWindows() uses VirtualSpaceWindow.restoreOrderComparator
+/// to sort windows within each app during restore. These tests validate that shared logic.
 final class VirtualSpaceZOrderTests: XCTestCase {
 
-    func testWindowZOrderPreservation() {
-        // Create windows with specific z-order
-        let windows = [
-            VirtualSpaceWindow(
-                appBundleID: "com.apple.finder",
-                windowTitle: "Topmost",
-                frame: CGRect(x: 0, y: 0, width: 100, height: 100),
-                zIndex: 0  // Topmost
-            ),
-            VirtualSpaceWindow(
-                appBundleID: "com.apple.Terminal",
-                windowTitle: "Middle",
-                frame: CGRect(x: 50, y: 50, width: 100, height: 100),
-                zIndex: 1
-            ),
-            VirtualSpaceWindow(
-                appBundleID: "com.apple.Safari",
-                windowTitle: "Bottom",
-                frame: CGRect(x: 100, y: 100, width: 100, height: 100),
-                zIndex: 2  // Bottommost
-            )
-        ]
+    // MARK: - Comparator Tests (directly testing production sorting logic)
 
-        let space = VirtualSpace(
-            number: 1,
-            windows: windows,
-            displayID: 1
-        )
+    func testRestoreOrderComparator_HigherZIndexComesFirst() {
+        let back = VirtualSpaceWindow(appBundleID: "a", windowTitle: "Back", frame: .zero, zIndex: 2)
+        let front = VirtualSpaceWindow(appBundleID: "a", windowTitle: "Front", frame: .zero, zIndex: 0)
 
-        // Verify z-order is preserved
-        let sortedByZ = space.windows.sorted { $0.zIndex < $1.zIndex }
-        XCTAssertEqual(sortedByZ[0].windowTitle, "Topmost")
-        XCTAssertEqual(sortedByZ[1].windowTitle, "Middle")
-        XCTAssertEqual(sortedByZ[2].windowTitle, "Bottom")
+        // In restore order, higher zIndex (back) should come before lower zIndex (front)
+        XCTAssertTrue(VirtualSpaceWindow.restoreOrderComparator(back, front))
+        XCTAssertFalse(VirtualSpaceWindow.restoreOrderComparator(front, back))
     }
 
-    func testRestoreOrderReversesZOrder() {
-        // When restoring, we should raise from back to front
-        // So a reverse sort by zIndex gives us the restoration order
+    func testZOrderComparator_LowerZIndexComesFirst() {
+        let back = VirtualSpaceWindow(appBundleID: "a", windowTitle: "Back", frame: .zero, zIndex: 2)
+        let front = VirtualSpaceWindow(appBundleID: "a", windowTitle: "Front", frame: .zero, zIndex: 0)
+
+        // In z-order, lower zIndex (front) should come before higher zIndex (back)
+        XCTAssertTrue(VirtualSpaceWindow.zOrderComparator(front, back))
+        XCTAssertFalse(VirtualSpaceWindow.zOrderComparator(back, front))
+    }
+
+    func testRestoreOrderComparator_EqualZIndex() {
+        let w1 = VirtualSpaceWindow(appBundleID: "a", windowTitle: "W1", frame: .zero, zIndex: 1)
+        let w2 = VirtualSpaceWindow(appBundleID: "b", windowTitle: "W2", frame: .zero, zIndex: 1)
+
+        // Equal zIndex: neither should be "before" the other
+        XCTAssertFalse(VirtualSpaceWindow.restoreOrderComparator(w1, w2))
+        XCTAssertFalse(VirtualSpaceWindow.restoreOrderComparator(w2, w1))
+    }
+
+    // MARK: - Property Tests (using the comparators)
+
+    func testWindowsByZOrder_ReturnsCorrectOrder() {
+        // Create windows in random order with specific z-indices
         let windows = [
-            VirtualSpaceWindow(appBundleID: "a", windowTitle: "A", frame: .zero, zIndex: 0),
-            VirtualSpaceWindow(appBundleID: "b", windowTitle: "B", frame: .zero, zIndex: 1),
-            VirtualSpaceWindow(appBundleID: "c", windowTitle: "C", frame: .zero, zIndex: 2)
+            VirtualSpaceWindow(appBundleID: "com.apple.Terminal", windowTitle: "Middle", frame: .zero, zIndex: 1),
+            VirtualSpaceWindow(appBundleID: "com.apple.finder", windowTitle: "Topmost", frame: .zero, zIndex: 0),
+            VirtualSpaceWindow(appBundleID: "com.apple.Safari", windowTitle: "Bottom", frame: .zero, zIndex: 2)
         ]
 
-        // Sort by zIndex descending (back to front for restoration)
-        let restoreOrder = windows.sorted { $0.zIndex > $1.zIndex }
+        let space = VirtualSpace(number: 1, windows: windows, displayID: 1)
 
-        XCTAssertEqual(restoreOrder[0].windowTitle, "C", "Should restore C first (bottom)")
+        // Test the production windowsByZOrder property
+        let byZOrder = space.windowsByZOrder
+        XCTAssertEqual(byZOrder.count, 3)
+        XCTAssertEqual(byZOrder[0].windowTitle, "Topmost", "zIndex 0 should be first (topmost)")
+        XCTAssertEqual(byZOrder[1].windowTitle, "Middle", "zIndex 1 should be second")
+        XCTAssertEqual(byZOrder[2].windowTitle, "Bottom", "zIndex 2 should be last (bottommost)")
+    }
+
+    func testWindowsInRestoreOrder_ReturnsBackToFront() {
+        // When restoring, we raise windows from back to front so the topmost window ends up on top
+        let windows = [
+            VirtualSpaceWindow(appBundleID: "a", windowTitle: "A", frame: .zero, zIndex: 0),  // Topmost
+            VirtualSpaceWindow(appBundleID: "b", windowTitle: "B", frame: .zero, zIndex: 1),
+            VirtualSpaceWindow(appBundleID: "c", windowTitle: "C", frame: .zero, zIndex: 2)   // Bottommost
+        ]
+
+        let space = VirtualSpace(number: 1, windows: windows, displayID: 1)
+
+        // Test the production windowsInRestoreOrder property
+        let restoreOrder = space.windowsInRestoreOrder
+        XCTAssertEqual(restoreOrder.count, 3)
+        XCTAssertEqual(restoreOrder[0].windowTitle, "C", "Should restore C first (it's at the bottom)")
         XCTAssertEqual(restoreOrder[1].windowTitle, "B", "Should restore B second (middle)")
-        XCTAssertEqual(restoreOrder[2].windowTitle, "A", "Should restore A last (top)")
+        XCTAssertEqual(restoreOrder[2].windowTitle, "A", "Should restore A last (so it ends up on top)")
+    }
+
+    func testWindowsInRestoreOrder_EmptySpace() {
+        let space = VirtualSpace(number: 1, windows: [], displayID: 1)
+        XCTAssertTrue(space.windowsInRestoreOrder.isEmpty)
+    }
+
+    func testWindowsInRestoreOrder_SingleWindow() {
+        let windows = [
+            VirtualSpaceWindow(appBundleID: "a", windowTitle: "Only", frame: .zero, zIndex: 0)
+        ]
+        let space = VirtualSpace(number: 1, windows: windows, displayID: 1)
+
+        let restoreOrder = space.windowsInRestoreOrder
+        XCTAssertEqual(restoreOrder.count, 1)
+        XCTAssertEqual(restoreOrder[0].windowTitle, "Only")
+    }
+
+    func testWindowsByZOrder_ManyWindows() {
+        // Test with more windows to ensure sorting is stable
+        let windows = (0..<10).map { i in
+            VirtualSpaceWindow(appBundleID: "app\(i)", windowTitle: "Window \(i)", frame: .zero, zIndex: i)
+        }.shuffled()  // Shuffle to ensure the property actually sorts
+
+        let space = VirtualSpace(number: 1, windows: windows, displayID: 1)
+
+        let byZOrder = space.windowsByZOrder
+        for (index, window) in byZOrder.enumerated() {
+            XCTAssertEqual(window.zIndex, index, "Window at position \(index) should have zIndex \(index)")
+        }
     }
 }
 
@@ -463,5 +510,144 @@ final class VirtualSpaceFramePersistenceTests: XCTestCase {
         XCTAssertNotNil(rightWindow)
         XCTAssertEqual(leftWindow?.frame.width, 960)
         XCTAssertEqual(rightWindow?.frame.origin.x, 960)
+    }
+}
+
+// MARK: - Virtual Spaces Settings Tests
+
+final class VirtualSpacesSettingsTests: XCTestCase {
+
+    func testVirtualSpacesEnabledDefaultValue() {
+        let defaults = MacTileSettings.default
+        XCTAssertTrue(defaults.virtualSpacesEnabled, "Virtual spaces should be enabled by default")
+    }
+
+    func testVirtualSpaceSaveModifiersDefaultValue() {
+        let defaults = MacTileSettings.default
+        // Default: Control + Option + Shift
+        let expectedModifiers = KeyboardShortcut.Modifiers.control |
+                               KeyboardShortcut.Modifiers.option |
+                               KeyboardShortcut.Modifiers.shift
+        XCTAssertEqual(defaults.virtualSpaceSaveModifiers, expectedModifiers)
+    }
+
+    func testVirtualSpaceRestoreModifiersDefaultValue() {
+        let defaults = MacTileSettings.default
+        // Default: Control + Option
+        let expectedModifiers = KeyboardShortcut.Modifiers.control |
+                               KeyboardShortcut.Modifiers.option
+        XCTAssertEqual(defaults.virtualSpaceRestoreModifiers, expectedModifiers)
+    }
+
+    func testVirtualSpacesSettingsCodable() throws {
+        var settings = MacTileSettings.default
+        settings.virtualSpacesEnabled = false
+        settings.virtualSpaceSaveModifiers = KeyboardShortcut.Modifiers.command | KeyboardShortcut.Modifiers.shift
+        settings.virtualSpaceRestoreModifiers = KeyboardShortcut.Modifiers.command
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(settings)
+
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(MacTileSettings.self, from: data)
+
+        XCTAssertEqual(decoded.virtualSpacesEnabled, false)
+        XCTAssertEqual(decoded.virtualSpaceSaveModifiers, KeyboardShortcut.Modifiers.command | KeyboardShortcut.Modifiers.shift)
+        XCTAssertEqual(decoded.virtualSpaceRestoreModifiers, KeyboardShortcut.Modifiers.command)
+    }
+}
+
+// MARK: - Default Tiling Presets Tests
+
+final class DefaultTilingPresetsTests: XCTestCase {
+
+    func testDefaultTilingPresetsExist() {
+        let presets = MacTileSettings.defaultTilingPresets
+        XCTAssertEqual(presets.count, 4, "Should have 4 default presets (R, E, F, C)")
+    }
+
+    func testRightPreset() {
+        let presets = MacTileSettings.defaultTilingPresets
+        guard let rightPreset = presets.first(where: { $0.keyString == "R" }) else {
+            XCTFail("R preset not found")
+            return
+        }
+
+        XCTAssertEqual(rightPreset.keyCode, 15, "R key code should be 15")
+        XCTAssertEqual(rightPreset.modifiers, KeyboardShortcut.Modifiers.none, "R should have no modifiers")
+        XCTAssertEqual(rightPreset.positions.count, 3, "R should have 3 cycling positions")
+        XCTAssertTrue(rightPreset.autoConfirm, "R should auto-confirm")
+
+        // First position: right half
+        XCTAssertEqual(rightPreset.positions[0].startX, 0.5, accuracy: 0.01)
+        XCTAssertEqual(rightPreset.positions[0].endX, 1.0, accuracy: 0.01)
+    }
+
+    func testLeftPreset() {
+        let presets = MacTileSettings.defaultTilingPresets
+        guard let leftPreset = presets.first(where: { $0.keyString == "E" }) else {
+            XCTFail("E preset not found")
+            return
+        }
+
+        XCTAssertEqual(leftPreset.keyCode, 14, "E key code should be 14")
+        XCTAssertEqual(leftPreset.modifiers, KeyboardShortcut.Modifiers.none, "E should have no modifiers")
+        XCTAssertEqual(leftPreset.positions.count, 3, "E should have 3 cycling positions")
+        XCTAssertTrue(leftPreset.autoConfirm, "E should auto-confirm")
+
+        // First position: left half
+        XCTAssertEqual(leftPreset.positions[0].startX, 0.0, accuracy: 0.01)
+        XCTAssertEqual(leftPreset.positions[0].endX, 0.5, accuracy: 0.01)
+    }
+
+    func testFullScreenPreset() {
+        let presets = MacTileSettings.defaultTilingPresets
+        guard let fullPreset = presets.first(where: { $0.keyString == "F" }) else {
+            XCTFail("F preset not found")
+            return
+        }
+
+        XCTAssertEqual(fullPreset.keyCode, 3, "F key code should be 3")
+        XCTAssertEqual(fullPreset.modifiers, KeyboardShortcut.Modifiers.none, "F should have no modifiers")
+        XCTAssertEqual(fullPreset.positions.count, 1, "F should have 1 position")
+        XCTAssertTrue(fullPreset.autoConfirm, "F should auto-confirm")
+
+        // Full screen position
+        XCTAssertEqual(fullPreset.positions[0].startX, 0.0, accuracy: 0.01)
+        XCTAssertEqual(fullPreset.positions[0].startY, 0.0, accuracy: 0.01)
+        XCTAssertEqual(fullPreset.positions[0].endX, 1.0, accuracy: 0.01)
+        XCTAssertEqual(fullPreset.positions[0].endY, 1.0, accuracy: 0.01)
+    }
+
+    func testCenterPreset() {
+        let presets = MacTileSettings.defaultTilingPresets
+        guard let centerPreset = presets.first(where: { $0.keyString == "C" }) else {
+            XCTFail("C preset not found")
+            return
+        }
+
+        XCTAssertEqual(centerPreset.keyCode, 8, "C key code should be 8")
+        XCTAssertEqual(centerPreset.modifiers, KeyboardShortcut.Modifiers.none, "C should have no modifiers")
+        XCTAssertEqual(centerPreset.positions.count, 2, "C should have 2 cycling positions")
+        XCTAssertTrue(centerPreset.autoConfirm, "C should auto-confirm")
+
+        // First position: center third
+        XCTAssertEqual(centerPreset.positions[0].startX, 0.333, accuracy: 0.01)
+        XCTAssertEqual(centerPreset.positions[0].endX, 0.667, accuracy: 0.01)
+    }
+
+    func testDefaultPresetsAllHaveAutoConfirm() {
+        let presets = MacTileSettings.defaultTilingPresets
+        for preset in presets {
+            XCTAssertTrue(preset.autoConfirm, "Preset \(preset.keyString) should have autoConfirm enabled")
+        }
+    }
+
+    func testDefaultPresetsAllHaveNoModifiers() {
+        let presets = MacTileSettings.defaultTilingPresets
+        for preset in presets {
+            XCTAssertEqual(preset.modifiers, KeyboardShortcut.Modifiers.none,
+                          "Preset \(preset.keyString) should have no modifiers")
+        }
     }
 }

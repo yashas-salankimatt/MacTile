@@ -357,7 +357,10 @@ class VirtualSpaceManager {
 
             // Raise windows for this app in z-order (back to front within the app)
             // So the frontmost window of this app ends up on top
-            let sortedAppWindows = appWindows.sorted { $0.spaceWindow.zIndex > $1.spaceWindow.zIndex }
+            // Uses VirtualSpaceWindow.restoreOrderComparator - the canonical restore order logic
+            let sortedAppWindows = appWindows.sorted {
+                VirtualSpaceWindow.restoreOrderComparator($0.spaceWindow, $1.spaceWindow)
+            }
             for (_, axWindow, _) in sortedAppWindows {
                 AXUIElementPerformAction(axWindow, kAXRaiseAction as CFString)
             }
