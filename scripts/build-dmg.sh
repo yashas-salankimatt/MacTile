@@ -8,7 +8,7 @@ set -e
 
 # Configuration
 APP_NAME="MacTile"
-VERSION="1.0.5"
+VERSION="1.1.0"
 DMG_NAME="${APP_NAME}-${VERSION}"
 
 # Paths

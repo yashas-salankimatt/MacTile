@@ -2,6 +2,48 @@
 
 All notable changes to MacTile will be documented in this file.
 
+## [1.1.0] - 2026-02-03
+
+### Added
+
+- **Virtual Spaces**: Save and restore window arrangements per monitor
+  - 10 virtual spaces (0-9) per monitor for organizing different workflows
+  - Save current window positions with customizable modifier keys + number
+  - Restore windows to saved positions with correct z-order (stacking)
+  - Rename spaces for easy identification (shown in menu bar)
+  - Only saves windows that are at least 40% visible (filters hidden windows)
+  - Persistent storage - spaces survive app restarts
+
+- **Virtual Spaces Settings Tab**: Full configuration in Settings > Spaces
+  - Enable/disable virtual spaces feature
+  - Customizable save modifiers (default: Control+Option+Shift)
+  - Customizable restore modifiers (default: Control+Option)
+  - Record new modifiers by pressing modifier keys + Space
+
+- **Default Tiling Presets**: Quick window tiling without configuration
+  - `R` - Right side (cycles: half → third → quarter)
+  - `E` - Left side (cycles: half → third → quarter)
+  - `F` - Full screen
+  - `C` - Center (cycles: third → half)
+  - All presets auto-confirm and have no modifiers (work in overlay)
+
+- **Per-Tab Reset Buttons**: Reset individual settings tabs to defaults
+  - Each tab (General, Shortcuts, Appearance, Presets, Focus, Spaces) has its own reset button
+  - Replaces the global reset button for more granular control
+
+### Fixed
+
+- **Cancel Button Now Discards Changes**: Settings window properly reloads saved values when reopened after canceling
+- **Event Monitor Cleanup**: Recording keyboard shortcuts no longer leaks event monitors when the settings window is closed
+- **Virtual Spaces Disable**: Disabling virtual spaces now fully stops all background monitoring
+
+### Improved
+
+- **Test Suite**: Comprehensive tests now validate actual production code paths
+  - ResizeStateChecker extracted to MacTileCore and used by WindowManager
+  - Z-order sorting uses shared comparators between tests and production
+  - 135 tests covering grid operations, window management, virtual spaces, and settings
+
 ## [1.0.5] - 2026-01-25
 
 ### Fixed
