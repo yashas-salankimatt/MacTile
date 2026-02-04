@@ -70,6 +70,17 @@ MacTile fully supports multi-monitor setups:
 
 Tiling presets allow you to quickly tile windows to predefined screen positions using keyboard shortcuts. Configure them in Settings > Presets.
 
+### Default Presets
+
+MacTile includes the following default presets (press while the overlay is open):
+
+| Key | Action | Cycle Positions |
+|-----|--------|-----------------|
+| `R` | Right side | Right half → Right third → Right quarter |
+| `E` | Left side | Left half → Left third → Left quarter |
+| `F` | Full screen | Full screen |
+| `C` | Center | Center third → Center half |
+
 ### Features
 
 - **Proportional Positioning**: Define positions as screen proportions (0.0-1.0), so presets work on any screen size
@@ -79,15 +90,16 @@ Tiling presets allow you to quickly tile windows to predefined screen positions 
 - **Modifier Support**: Combine with Control, Option, Shift, or Command modifiers
 - **Auto-Confirm**: Optionally apply the preset immediately without pressing Enter
 
-### Examples
+### Custom Preset Examples
 
 | Preset | Positions | Description |
 |--------|-----------|-------------|
-| `R` | (0.5,0)→(1,1) | Right half of screen |
-| `L` | (0,0)→(0.5,1) | Left half of screen |
-| `R` (cycling) | (0.5,0)→(1,1), (0.67,0)→(1,1), (0.75,0)→(1,1) | Right half → Right third → Right quarter |
+| `T` | (0,0)→(1,0.5) | Top half of screen |
+| `B` | (0,0.5)→(1,1) | Bottom half of screen |
 | `⌃1` | (0,0)→(0.5,0.5) | Top-left quarter |
 | `⌃2` | (0.5,0)→(1,0.5) | Top-right quarter |
+| `⌃3` | (0,0.5)→(0.5,1) | Bottom-left quarter |
+| `⌃4` | (0.5,0.5)→(1,1) | Bottom-right quarter |
 
 ### How Cycling Works
 
@@ -138,11 +150,11 @@ Focus presets allow you to quickly switch to specific applications and cycle thr
 
 ## Virtual Spaces
 
-Virtual Spaces allow you to save and restore window arrangements on a per-monitor basis. Each monitor can have up to 9 virtual spaces, which serve as containers for window positions, sizes, and z-order (stacking order).
+Virtual Spaces allow you to save and restore window arrangements on a per-monitor basis. Each monitor can have up to 10 virtual spaces (0-9), which serve as containers for window positions, sizes, and z-order (stacking order).
 
 ### Features
 
-- **9 Spaces Per Monitor**: Each monitor independently manages its own set of 9 virtual spaces
+- **10 Spaces Per Monitor**: Each monitor independently manages its own set of 10 virtual spaces (0-9)
 - **Save Window Arrangements**: Capture the positions, sizes, and stacking order of visible windows
 - **Restore with Z-Order**: Windows are restored to their exact positions with correct stacking order
 - **Focus History**: After restore, Alt+Tab order matches the saved z-order (topmost window focused first)
@@ -152,17 +164,19 @@ Virtual Spaces allow you to save and restore window arrangements on a per-monito
 
 ### Keyboard Shortcuts
 
+Default keyboard shortcuts (modifier keys can be customized in Settings > Spaces):
+
 | Key | Action |
 |-----|--------|
-| `Control+Option+Shift+1-9` | Save current windows to virtual space 1-9 |
-| `Control+Option+1-9` | Restore windows from virtual space 1-9 |
+| `Control+Option+Shift+0-9` | Save current windows to virtual space 0-9 |
+| `Control+Option+0-9` | Restore windows from virtual space 0-9 |
 | `Control+Option+Comma` | Rename the currently active virtual space |
 
 ### How It Works
 
-1. **Saving a Space**: Press `Control+Option+Shift+1` (or 2-9) to save the current visible windows on the focused monitor to that virtual space. The space becomes "active" and its name appears in the menu bar.
+1. **Saving a Space**: Press `Control+Option+Shift+0` (or 1-9) to save the current visible windows on the focused monitor to that virtual space. The space becomes "active" and its name appears in the menu bar.
 
-2. **Restoring a Space**: Press `Control+Option+1` (or 2-9) to restore windows from that virtual space. Windows are moved to their saved positions and sizes, and the stacking order is preserved.
+2. **Restoring a Space**: Press `Control+Option+0` (or 1-9) to restore windows from that virtual space. Windows are moved to their saved positions and sizes, and the stacking order is preserved.
 
 3. **Active State**: A virtual space is "active" after being saved or restored. It becomes "inactive" when:
    - A window not in that space gains focus
@@ -173,7 +187,7 @@ Virtual Spaces allow you to save and restore window arrangements on a per-monito
 ### Multi-Monitor Support
 
 Virtual spaces are tracked independently per monitor:
-- Each monitor has its own set of 9 virtual spaces
+- Each monitor has its own set of 10 virtual spaces (0-9)
 - Saving/restoring affects only the monitor containing the focused window
 - You can have different spaces active on different monitors simultaneously
 
@@ -232,6 +246,12 @@ Access Settings from the menu bar icon. You can configure:
 - **Global**: Enable global hotkey functionality (works without overlay)
 - **Overlay**: Enable use during tiling overlay
 - **Open**: Launch the application if it's not already running
+
+### Spaces (Virtual Spaces)
+- **Enable Virtual Spaces**: Toggle the entire virtual spaces feature on/off
+- **Save Modifiers**: Customize the modifier keys for saving (default: Control+Option+Shift)
+- **Restore Modifiers**: Customize the modifier keys for restoring (default: Control+Option)
+- Press modifier keys + Space to record new modifiers
 
 ### Appearance
 - **Overlay Background**: Background color and opacity

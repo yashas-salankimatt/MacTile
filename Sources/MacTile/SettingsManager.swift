@@ -76,7 +76,10 @@ class SettingsManager {
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
             appearance: settings.appearance,
-            virtualSpaces: settings.virtualSpaces
+            virtualSpaces: settings.virtualSpaces,
+            virtualSpacesEnabled: settings.virtualSpacesEnabled,
+            virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
         )
         settings = newSettings
     }
@@ -98,7 +101,10 @@ class SettingsManager {
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
             appearance: settings.appearance,
-            virtualSpaces: settings.virtualSpaces
+            virtualSpaces: settings.virtualSpaces,
+            virtualSpacesEnabled: settings.virtualSpacesEnabled,
+            virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
         )
     }
 
@@ -119,7 +125,10 @@ class SettingsManager {
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
             appearance: settings.appearance,
-            virtualSpaces: settings.virtualSpaces
+            virtualSpaces: settings.virtualSpaces,
+            virtualSpacesEnabled: settings.virtualSpacesEnabled,
+            virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
         )
     }
 
@@ -140,7 +149,10 @@ class SettingsManager {
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
             appearance: settings.appearance,
-            virtualSpaces: settings.virtualSpaces
+            virtualSpaces: settings.virtualSpaces,
+            virtualSpacesEnabled: settings.virtualSpacesEnabled,
+            virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
         )
     }
 
@@ -161,7 +173,10 @@ class SettingsManager {
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
             appearance: settings.appearance,
-            virtualSpaces: settings.virtualSpaces
+            virtualSpaces: settings.virtualSpaces,
+            virtualSpacesEnabled: settings.virtualSpacesEnabled,
+            virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
         )
     }
 
@@ -182,7 +197,10 @@ class SettingsManager {
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
             appearance: settings.appearance,
-            virtualSpaces: settings.virtualSpaces
+            virtualSpaces: settings.virtualSpaces,
+            virtualSpacesEnabled: settings.virtualSpacesEnabled,
+            virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
         )
     }
 
@@ -203,7 +221,10 @@ class SettingsManager {
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
             appearance: settings.appearance,
-            virtualSpaces: settings.virtualSpaces
+            virtualSpaces: settings.virtualSpaces,
+            virtualSpacesEnabled: settings.virtualSpacesEnabled,
+            virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
         )
     }
 
@@ -224,7 +245,10 @@ class SettingsManager {
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
             appearance: settings.appearance,
-            virtualSpaces: settings.virtualSpaces
+            virtualSpaces: settings.virtualSpaces,
+            virtualSpacesEnabled: settings.virtualSpacesEnabled,
+            virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
         )
     }
 
@@ -245,7 +269,10 @@ class SettingsManager {
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
             appearance: settings.appearance,
-            virtualSpaces: settings.virtualSpaces
+            virtualSpaces: settings.virtualSpaces,
+            virtualSpacesEnabled: settings.virtualSpacesEnabled,
+            virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
         )
     }
 
@@ -266,7 +293,10 @@ class SettingsManager {
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
             appearance: settings.appearance,
-            virtualSpaces: settings.virtualSpaces
+            virtualSpaces: settings.virtualSpaces,
+            virtualSpacesEnabled: settings.virtualSpacesEnabled,
+            virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
         )
     }
 
@@ -287,7 +317,10 @@ class SettingsManager {
             tilingPresets: presets,
             focusPresets: settings.focusPresets,
             appearance: settings.appearance,
-            virtualSpaces: settings.virtualSpaces
+            virtualSpaces: settings.virtualSpaces,
+            virtualSpacesEnabled: settings.virtualSpacesEnabled,
+            virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
         )
     }
 
@@ -308,7 +341,10 @@ class SettingsManager {
             tilingPresets: settings.tilingPresets,
             focusPresets: presets,
             appearance: settings.appearance,
-            virtualSpaces: settings.virtualSpaces
+            virtualSpaces: settings.virtualSpaces,
+            virtualSpacesEnabled: settings.virtualSpacesEnabled,
+            virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
         )
     }
 
@@ -329,7 +365,10 @@ class SettingsManager {
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
             appearance: appearance,
-            virtualSpaces: settings.virtualSpaces
+            virtualSpaces: settings.virtualSpaces,
+            virtualSpacesEnabled: settings.virtualSpacesEnabled,
+            virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
         )
     }
 
@@ -350,7 +389,10 @@ class SettingsManager {
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
             appearance: settings.appearance,
-            virtualSpaces: settings.virtualSpaces
+            virtualSpaces: settings.virtualSpaces,
+            virtualSpacesEnabled: settings.virtualSpacesEnabled,
+            virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
         )
     }
 
@@ -371,7 +413,10 @@ class SettingsManager {
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
             appearance: settings.appearance,
-            virtualSpaces: settings.virtualSpaces
+            virtualSpaces: settings.virtualSpaces,
+            virtualSpacesEnabled: settings.virtualSpacesEnabled,
+            virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
         )
     }
 
@@ -392,7 +437,58 @@ class SettingsManager {
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
             appearance: settings.appearance,
-            virtualSpaces: spaces
+            virtualSpaces: spaces,
+            virtualSpacesEnabled: settings.virtualSpacesEnabled,
+            virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
+        )
+    }
+
+    func updateVirtualSpacesEnabled(_ enabled: Bool) {
+        settings = MacTileSettings(
+            gridSizes: settings.gridSizes,
+            windowSpacing: settings.windowSpacing,
+            insets: settings.insets,
+            autoClose: settings.autoClose,
+            showMenuBarIcon: settings.showMenuBarIcon,
+            launchAtLogin: settings.launchAtLogin,
+            confirmOnClickWithoutDrag: settings.confirmOnClickWithoutDrag,
+            showHelpText: settings.showHelpText,
+            showMonitorIndicator: settings.showMonitorIndicator,
+            toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
+            overlayKeyboard: settings.overlayKeyboard,
+            tilingPresets: settings.tilingPresets,
+            focusPresets: settings.focusPresets,
+            appearance: settings.appearance,
+            virtualSpaces: settings.virtualSpaces,
+            virtualSpacesEnabled: enabled,
+            virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
+        )
+    }
+
+    func updateVirtualSpaceModifiers(save: UInt, restore: UInt) {
+        settings = MacTileSettings(
+            gridSizes: settings.gridSizes,
+            windowSpacing: settings.windowSpacing,
+            insets: settings.insets,
+            autoClose: settings.autoClose,
+            showMenuBarIcon: settings.showMenuBarIcon,
+            launchAtLogin: settings.launchAtLogin,
+            confirmOnClickWithoutDrag: settings.confirmOnClickWithoutDrag,
+            showHelpText: settings.showHelpText,
+            showMonitorIndicator: settings.showMonitorIndicator,
+            toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
+            overlayKeyboard: settings.overlayKeyboard,
+            tilingPresets: settings.tilingPresets,
+            focusPresets: settings.focusPresets,
+            appearance: settings.appearance,
+            virtualSpaces: settings.virtualSpaces,
+            virtualSpacesEnabled: settings.virtualSpacesEnabled,
+            virtualSpaceSaveModifiers: save,
+            virtualSpaceRestoreModifiers: restore
         )
     }
 
@@ -416,7 +512,10 @@ class SettingsManager {
             tilingPresets: settings.tilingPresets,
             focusPresets: settings.focusPresets,
             appearance: settings.appearance,
-            virtualSpaces: spaces
+            virtualSpaces: spaces,
+            virtualSpacesEnabled: settings.virtualSpacesEnabled,
+            virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
         )
 
         // Save directly to UserDefaults without triggering the didSet notification

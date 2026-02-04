@@ -150,6 +150,16 @@ class VirtualSpaceManager {
         return activeSpaces[displayID] != nil
     }
 
+    /// Deactivate all virtual spaces on all monitors
+    /// Called when the virtual spaces feature is disabled
+    func deactivateAllSpaces() {
+        let displayIDs = Array(activeSpaces.keys)
+        for displayID in displayIDs {
+            deactivateSpace(forMonitor: displayID)
+        }
+        print("[VirtualSpaces] All spaces deactivated")
+    }
+
     // MARK: - Window Capture
 
     /// Capture the topmost visible windows on a monitor

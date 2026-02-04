@@ -410,7 +410,7 @@ public struct VirtualSpaceWindow: Codable, Equatable {
 
 /// Represents a single virtual space (a saved arrangement of windows)
 public struct VirtualSpace: Codable, Equatable {
-    /// The space number (1-9)
+    /// The space number (0-9)
     public var number: Int
     /// Optional user-defined name
     public var name: String?
@@ -438,7 +438,7 @@ public struct VirtualSpace: Codable, Equatable {
         windows: [VirtualSpaceWindow] = [],
         displayID: UInt32
     ) {
-        self.number = max(1, min(9, number))
+        self.number = max(0, min(9, number))
         self.name = name
         self.windows = windows
         self.displayID = displayID
@@ -455,7 +455,7 @@ public struct VirtualSpace: Codable, Equatable {
 /// Storage for all virtual spaces across monitors
 /// Key is display ID (UInt32), value is dictionary of space number to VirtualSpace
 public struct VirtualSpacesStorage: Codable, Equatable {
-    /// Spaces by display ID, then by space number (1-9)
+    /// Spaces by display ID, then by space number (0-9)
     public var spacesByMonitor: [String: [String: VirtualSpace]]
 
     public init() {
@@ -470,7 +470,7 @@ public struct VirtualSpacesStorage: Codable, Equatable {
     }
 
     /// Set a virtual space for a monitor
-    /// Uses space.number (which is clamped to 1-9) as the key to ensure consistency
+    /// Uses space.number (which is clamped to 0-9) as the key to ensure consistency
     public mutating func setSpace(_ space: VirtualSpace, displayID: UInt32) {
         let displayKey = String(displayID)
         let numberKey = String(space.number)  // Use the clamped number from the space itself
@@ -480,11 +480,11 @@ public struct VirtualSpacesStorage: Codable, Equatable {
         spacesByMonitor[displayKey]?[numberKey] = space
     }
 
-    /// Get all spaces for a monitor (1-9)
+    /// Get all spaces for a monitor (0-9)
     public func getSpaces(displayID: UInt32) -> [VirtualSpace] {
         let displayKey = String(displayID)
         guard let spaces = spacesByMonitor[displayKey] else { return [] }
-        return (1...9).compactMap { spaces[String($0)] }
+        return (0...9).compactMap { spaces[String($0)] }
     }
 
     /// Get all non-empty spaces for a monitor
@@ -625,6 +625,15 @@ public struct MacTileSettings: Equatable {
     /// Virtual spaces storage for window arrangements
     public var virtualSpaces: VirtualSpacesStorage
 
+    /// Whether virtual spaces feature is enabled
+    public var virtualSpacesEnabled: Bool
+
+    /// Modifiers for saving virtual spaces (default: Control+Option+Shift)
+    public var virtualSpaceSaveModifiers: UInt
+
+    /// Modifiers for restoring virtual spaces (default: Control+Option)
+    public var virtualSpaceRestoreModifiers: UInt
+
     // MARK: - Default Values
 
     public static let defaultGridSizes = [
@@ -633,6 +642,67 @@ public struct MacTileSettings: Equatable {
         GridSize(cols: 4, rows: 4),
         GridSize(cols: 3, rows: 3),
         GridSize(cols: 2, rows: 2)
+    ]
+
+    /// Default modifiers for saving virtual spaces (Control+Option+Shift)
+    public static let defaultVirtualSpaceSaveModifiers: UInt =
+        KeyboardShortcut.Modifiers.control | KeyboardShortcut.Modifiers.option | KeyboardShortcut.Modifiers.shift
+
+    /// Default modifiers for restoring virtual spaces (Control+Option)
+    public static let defaultVirtualSpaceRestoreModifiers: UInt =
+        KeyboardShortcut.Modifiers.control | KeyboardShortcut.Modifiers.option
+
+    /// Default tiling presets for quick window positioning
+    public static let defaultTilingPresets: [TilingPreset] = [
+        // R: Right half -> Right third -> Right quarter
+        TilingPreset(
+            keyCode: 15,  // R key
+            keyString: "R",
+            modifiers: KeyboardShortcut.Modifiers.none,
+            positions: [
+                PresetPosition(startX: 0.5, startY: 0, endX: 1, endY: 1),      // Right half
+                PresetPosition(startX: 0.667, startY: 0, endX: 1, endY: 1),    // Right third
+                PresetPosition(startX: 0.75, startY: 0, endX: 1, endY: 1)      // Right quarter
+            ],
+            autoConfirm: true,
+            cycleTimeout: 2000
+        ),
+        // E: Left half -> Left third -> Left quarter
+        TilingPreset(
+            keyCode: 14,  // E key
+            keyString: "E",
+            modifiers: KeyboardShortcut.Modifiers.none,
+            positions: [
+                PresetPosition(startX: 0, startY: 0, endX: 0.5, endY: 1),      // Left half
+                PresetPosition(startX: 0, startY: 0, endX: 0.333, endY: 1),    // Left third
+                PresetPosition(startX: 0, startY: 0, endX: 0.25, endY: 1)      // Left quarter
+            ],
+            autoConfirm: true,
+            cycleTimeout: 2000
+        ),
+        // F: Full screen
+        TilingPreset(
+            keyCode: 3,   // F key
+            keyString: "F",
+            modifiers: KeyboardShortcut.Modifiers.none,
+            positions: [
+                PresetPosition(startX: 0, startY: 0, endX: 1, endY: 1)         // Full screen
+            ],
+            autoConfirm: true,
+            cycleTimeout: 2000
+        ),
+        // C: Center third -> Center half
+        TilingPreset(
+            keyCode: 8,   // C key
+            keyString: "C",
+            modifiers: KeyboardShortcut.Modifiers.none,
+            positions: [
+                PresetPosition(startX: 0.333, startY: 0, endX: 0.667, endY: 1), // Center third
+                PresetPosition(startX: 0.25, startY: 0, endX: 0.75, endY: 1)    // Center half
+            ],
+            autoConfirm: true,
+            cycleTimeout: 2000
+        )
     ]
 
     public static let `default` = MacTileSettings(
@@ -648,10 +718,13 @@ public struct MacTileSettings: Equatable {
         toggleOverlayShortcut: .defaultToggleOverlay,
         secondaryToggleOverlayShortcut: .defaultSecondaryToggleOverlay,
         overlayKeyboard: .default,
-        tilingPresets: [],
+        tilingPresets: defaultTilingPresets,
         focusPresets: [],
         appearance: .default,
-        virtualSpaces: VirtualSpacesStorage()
+        virtualSpaces: VirtualSpacesStorage(),
+        virtualSpacesEnabled: true,
+        virtualSpaceSaveModifiers: defaultVirtualSpaceSaveModifiers,
+        virtualSpaceRestoreModifiers: defaultVirtualSpaceRestoreModifiers
     )
 
     public init(
@@ -670,7 +743,10 @@ public struct MacTileSettings: Equatable {
         tilingPresets: [TilingPreset],
         focusPresets: [FocusPreset],
         appearance: AppearanceSettings,
-        virtualSpaces: VirtualSpacesStorage = VirtualSpacesStorage()
+        virtualSpaces: VirtualSpacesStorage = VirtualSpacesStorage(),
+        virtualSpacesEnabled: Bool = true,
+        virtualSpaceSaveModifiers: UInt = defaultVirtualSpaceSaveModifiers,
+        virtualSpaceRestoreModifiers: UInt = defaultVirtualSpaceRestoreModifiers
     ) {
         self.gridSizes = gridSizes.isEmpty ? Self.defaultGridSizes : gridSizes
         self.windowSpacing = max(0, windowSpacing)
@@ -689,6 +765,9 @@ public struct MacTileSettings: Equatable {
         self.focusPresets = Array(focusPresets.prefix(30))
         self.appearance = appearance
         self.virtualSpaces = virtualSpaces
+        self.virtualSpacesEnabled = virtualSpacesEnabled
+        self.virtualSpaceSaveModifiers = virtualSpaceSaveModifiers
+        self.virtualSpaceRestoreModifiers = virtualSpaceRestoreModifiers
     }
 }
 
@@ -700,6 +779,7 @@ extension MacTileSettings: Codable {
         case launchAtLogin, confirmOnClickWithoutDrag, showHelpText, showMonitorIndicator
         case toggleOverlayShortcut, secondaryToggleOverlayShortcut, overlayKeyboard
         case tilingPresets, focusPresets, appearance, virtualSpaces
+        case virtualSpacesEnabled, virtualSpaceSaveModifiers, virtualSpaceRestoreModifiers
     }
 
     public init(from decoder: Decoder) throws {
@@ -722,8 +802,11 @@ extension MacTileSettings: Codable {
         focusPresets = try container.decode([FocusPreset].self, forKey: .focusPresets)
         appearance = try container.decode(AppearanceSettings.self, forKey: .appearance)
 
-        // Optional field for backward compatibility - older settings won't have this
+        // Optional fields for backward compatibility - older settings won't have these
         virtualSpaces = try container.decodeIfPresent(VirtualSpacesStorage.self, forKey: .virtualSpaces) ?? VirtualSpacesStorage()
+        virtualSpacesEnabled = try container.decodeIfPresent(Bool.self, forKey: .virtualSpacesEnabled) ?? true
+        virtualSpaceSaveModifiers = try container.decodeIfPresent(UInt.self, forKey: .virtualSpaceSaveModifiers) ?? Self.defaultVirtualSpaceSaveModifiers
+        virtualSpaceRestoreModifiers = try container.decodeIfPresent(UInt.self, forKey: .virtualSpaceRestoreModifiers) ?? Self.defaultVirtualSpaceRestoreModifiers
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -745,6 +828,9 @@ extension MacTileSettings: Codable {
         try container.encode(focusPresets, forKey: .focusPresets)
         try container.encode(appearance, forKey: .appearance)
         try container.encode(virtualSpaces, forKey: .virtualSpaces)
+        try container.encode(virtualSpacesEnabled, forKey: .virtualSpacesEnabled)
+        try container.encode(virtualSpaceSaveModifiers, forKey: .virtualSpaceSaveModifiers)
+        try container.encode(virtualSpaceRestoreModifiers, forKey: .virtualSpaceRestoreModifiers)
     }
 }
 

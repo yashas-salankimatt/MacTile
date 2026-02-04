@@ -72,12 +72,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, VirtualSpaceManagerDelegate 
         // Re-register focus preset hotkeys
         setupFocusHotKeys()
 
-        // Re-register virtual space hotkeys
+        // Re-register virtual space hotkeys (this also handles disabled state)
         setupVirtualSpaceHotKeys()
 
         // Update status item visibility
         let settings = SettingsManager.shared.settings
         statusItem?.isVisible = settings.showMenuBarIcon
+
+        // If virtual spaces are disabled, deactivate all active spaces
+        // This stops any active monitoring/observers
+        if !settings.virtualSpacesEnabled {
+            VirtualSpaceManager.shared.deactivateAllSpaces()
+        }
 
         // Update launch at login
         LaunchAtLoginManager.shared.setEnabled(settings.launchAtLogin)
@@ -298,9 +304,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, VirtualSpaceManagerDelegate 
         // Clear existing virtual space hotkeys
         virtualSpaceHotKeys.removeAll()
 
-        // Key codes for numbers 1-9
-        // 1=18, 2=19, 3=20, 4=21, 5=23, 6=22, 7=26, 8=28, 9=25
+        let settings = SettingsManager.shared.settings
+
+        // Don't register hotkeys if virtual spaces are disabled
+        guard settings.virtualSpacesEnabled else {
+            print("Virtual spaces disabled, skipping hotkey registration")
+            return
+        }
+
+        // Convert our modifier flags to NSEvent.ModifierFlags
+        let saveModifiers = modifiersFromFlags(settings.virtualSpaceSaveModifiers)
+        let restoreModifiers = modifiersFromFlags(settings.virtualSpaceRestoreModifiers)
+
+        // Key codes for numbers 0-9
+        // 0=29, 1=18, 2=19, 3=20, 4=21, 5=23, 6=22, 7=26, 8=28, 9=25
         let numberKeys: [(keyCode: UInt16, key: Key, number: Int)] = [
+            (29, .zero, 0),
             (18, .one, 1),
             (19, .two, 2),
             (20, .three, 3),
@@ -313,29 +332,47 @@ class AppDelegate: NSObject, NSApplicationDelegate, VirtualSpaceManagerDelegate 
         ]
 
         for (_, key, spaceNumber) in numberKeys {
-            // Restore: Control+Option+N
-            let restoreKey = HotKey(key: key, modifiers: [.control, .option])
+            // Restore: configurable modifiers + N
+            let restoreKey = HotKey(key: key, modifiers: restoreModifiers)
             restoreKey.keyDownHandler = { [weak self] in
                 self?.restoreVirtualSpace(number: spaceNumber)
             }
             virtualSpaceHotKeys.append(restoreKey)
 
-            // Save: Control+Option+Shift+N
-            let saveKey = HotKey(key: key, modifiers: [.control, .option, .shift])
+            // Save: configurable modifiers + N
+            let saveKey = HotKey(key: key, modifiers: saveModifiers)
             saveKey.keyDownHandler = { [weak self] in
                 self?.saveToVirtualSpace(number: spaceNumber)
             }
             virtualSpaceHotKeys.append(saveKey)
         }
 
-        // Rename: Control+Option+Comma (keyCode 43)
-        let renameKey = HotKey(key: .comma, modifiers: [.control, .option])
+        // Rename: use restore modifiers + Comma
+        let renameKey = HotKey(key: .comma, modifiers: restoreModifiers)
         renameKey.keyDownHandler = { [weak self] in
             self?.renameActiveVirtualSpace()
         }
         virtualSpaceHotKeys.append(renameKey)
 
-        print("Registered \(virtualSpaceHotKeys.count) virtual space hotkeys")
+        print("Registered \(virtualSpaceHotKeys.count) virtual space hotkeys (save: \(OverlayKeyboardSettings.modifierDisplayString(settings.virtualSpaceSaveModifiers)), restore: \(OverlayKeyboardSettings.modifierDisplayString(settings.virtualSpaceRestoreModifiers)))")
+    }
+
+    /// Convert our UInt modifier flags to NSEvent.ModifierFlags
+    private func modifiersFromFlags(_ flags: UInt) -> NSEvent.ModifierFlags {
+        var modifiers: NSEvent.ModifierFlags = []
+        if flags & KeyboardShortcut.Modifiers.control != 0 {
+            modifiers.insert(.control)
+        }
+        if flags & KeyboardShortcut.Modifiers.option != 0 {
+            modifiers.insert(.option)
+        }
+        if flags & KeyboardShortcut.Modifiers.shift != 0 {
+            modifiers.insert(.shift)
+        }
+        if flags & KeyboardShortcut.Modifiers.command != 0 {
+            modifiers.insert(.command)
+        }
+        return modifiers
     }
 
     // MARK: - Virtual Space Actions

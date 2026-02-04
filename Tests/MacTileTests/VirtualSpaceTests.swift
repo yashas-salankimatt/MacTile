@@ -82,11 +82,13 @@ final class VirtualSpaceTests: XCTestCase {
     }
 
     func testVirtualSpaceNumberClamping() {
-        let spaceTooLow = VirtualSpace(number: 0, displayID: 1)
+        let spaceTooLow = VirtualSpace(number: -1, displayID: 1)
         let spaceTooHigh = VirtualSpace(number: 15, displayID: 1)
+        let spaceZero = VirtualSpace(number: 0, displayID: 1)
 
-        XCTAssertEqual(spaceTooLow.number, 1, "Number should be clamped to minimum 1")
+        XCTAssertEqual(spaceTooLow.number, 0, "Number should be clamped to minimum 0")
         XCTAssertEqual(spaceTooHigh.number, 9, "Number should be clamped to maximum 9")
+        XCTAssertEqual(spaceZero.number, 0, "Number 0 should be valid")
     }
 
     func testVirtualSpaceDisplayName() {
