@@ -29,6 +29,10 @@ class VirtualSpaceManager {
     /// Last known window frames for detecting resizes
     private var lastKnownFrames: [UInt32: [WindowIdentifier: CGRect]] = [:]
 
+    /// Throttle layout matching checks per monitor
+    private var lastLayoutCheck: [UInt32: Date] = [:]
+    private let layoutCheckInterval: TimeInterval = 0.3
+
     private init() {}
 
     deinit {
@@ -102,8 +106,7 @@ class VirtualSpaceManager {
 
     /// Rename the active virtual space for a monitor
     func renameActiveSpace(name: String, forMonitor displayID: UInt32) {
-        guard let spaceNumber = activeSpaces[displayID],
-              var space = SettingsManager.shared.settings.virtualSpaces.getSpace(displayID: displayID, number: spaceNumber) else {
+        guard let spaceNumber = activeSpaces[displayID] else {
             print("[VirtualSpaces] No active space to rename")
             return
         }
@@ -175,17 +178,21 @@ class VirtualSpaceManager {
     // MARK: - Window Capture
 
     /// Capture the topmost visible windows on a monitor
-    private func captureTopmostWindows(forMonitor displayID: UInt32) -> [VirtualSpaceWindow] {
+    private func captureTopmostWindows(forMonitor displayID: UInt32, log: Bool = true) -> [VirtualSpaceWindow] {
         // Get monitor bounds
         guard let screen = screenForDisplayID(displayID) else {
-            print("[VirtualSpaces] Could not find screen for display ID \(displayID)")
+            if log {
+                print("[VirtualSpaces] Could not find screen for display ID \(displayID)")
+            }
             return []
         }
 
         // Get all windows in z-order using CGWindowListCopyWindowInfo
         let windowListOptions: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let windowList = CGWindowListCopyWindowInfo(windowListOptions, kCGNullWindowID) as? [[String: Any]] else {
-            print("[VirtualSpaces] Failed to get window list")
+            if log {
+                print("[VirtualSpaces] Failed to get window list")
+            }
             return []
         }
 
@@ -259,9 +266,12 @@ class VirtualSpaceManager {
                 continue
             }
 
+            let windowID = (windowInfo[kCGWindowNumber as String] as? NSNumber)?.uint32Value
+
             let spaceWindow = VirtualSpaceWindow(
                 appBundleID: bundleID,
                 windowTitle: windowTitle,
+                windowID: windowID,
                 frame: windowFrame,
                 zIndex: zIndex
             )
@@ -270,8 +280,10 @@ class VirtualSpaceManager {
         }
 
         // Filter windows by visibility - only keep windows that are at least 40% visible
-        let filteredWindows = filterWindowsByVisibility(capturedWindows, minimumVisibility: 40.0)
-        print("[VirtualSpaces] Filtered \(capturedWindows.count) windows to \(filteredWindows.count) visible windows")
+        let filteredWindows = filterWindowsByVisibility(capturedWindows, minimumVisibility: 40.0, log: log)
+        if log {
+            print("[VirtualSpaces] Filtered \(capturedWindows.count) windows to \(filteredWindows.count) visible windows")
+        }
 
         return filteredWindows
     }
@@ -279,7 +291,7 @@ class VirtualSpaceManager {
     /// Filter windows to only include those with sufficient visibility
     /// A window is considered visible if at least `minimumVisibility`% of its area
     /// is not covered by windows in front of it (lower zIndex)
-    private func filterWindowsByVisibility(_ windows: [VirtualSpaceWindow], minimumVisibility: CGFloat) -> [VirtualSpaceWindow] {
+    private func filterWindowsByVisibility(_ windows: [VirtualSpaceWindow], minimumVisibility: CGFloat, log: Bool = true) -> [VirtualSpaceWindow] {
         var visibleWindows: [VirtualSpaceWindow] = []
 
         for window in windows {
@@ -295,9 +307,13 @@ class VirtualSpaceManager {
 
             if visibility >= minimumVisibility {
                 visibleWindows.append(window)
-                print("[VirtualSpaces]   ✓ \(window.appBundleID) '\(window.windowTitle)' - \(Int(visibility))% visible")
+                if log {
+                    print("[VirtualSpaces]   ✓ \(window.appBundleID) '\(window.windowTitle)' - \(Int(visibility))% visible")
+                }
             } else {
-                print("[VirtualSpaces]   ✗ \(window.appBundleID) '\(window.windowTitle)' - \(Int(visibility))% visible (filtered out)")
+                if log {
+                    print("[VirtualSpaces]   ✗ \(window.appBundleID) '\(window.windowTitle)' - \(Int(visibility))% visible (filtered out)")
+                }
             }
         }
 
@@ -556,6 +572,18 @@ class VirtualSpaceManager {
             return
         }
 
+        // Ignore MacTile's own windows (overlay, settings, rename modal)
+        if bundleID == Bundle.main.bundleIdentifier {
+            return
+        }
+
+        // Attempt to re-activate a matching space for the focused monitor
+        if let focusedWindow = RealWindowManager.shared.getFocusedWindow() {
+            let center = CGPoint(x: focusedWindow.frame.midX, y: focusedWindow.frame.midY)
+            let displayID = VirtualSpaceManager.displayIDForPoint(center)
+            _ = attemptAutoActivateSpace(forMonitor: displayID)
+        }
+
         // Check each active space to see if the focused app is part of it
         for (displayID, _) in activeSpaces {
             guard let windowIdentifiers = activeSpaceWindows[displayID] else { continue }
@@ -601,6 +629,89 @@ class VirtualSpaceManager {
                 }
             }
         }
+    }
+
+    // MARK: - Layout Matching
+
+    private struct WindowIDSignature: Hashable {
+        let bundleID: String
+        let windowID: UInt32
+    }
+
+    /// Attempt to auto-activate a space if the current visible windows exactly match a saved space.
+    /// Returns true if a match was found (and activated or already active).
+    private func attemptAutoActivateSpace(forMonitor displayID: UInt32) -> Bool {
+        guard SettingsManager.shared.settings.virtualSpacesEnabled else { return false }
+
+        let now = Date()
+        if let lastCheck = lastLayoutCheck[displayID],
+           now.timeIntervalSince(lastCheck) < layoutCheckInterval {
+            return false
+        }
+        lastLayoutCheck[displayID] = now
+
+        let spaces = SettingsManager.shared.settings.virtualSpaces.getNonEmptySpaces(displayID: displayID)
+            .sorted { $0.number < $1.number }
+        guard !spaces.isEmpty else { return false }
+
+        let currentWindows = captureTopmostWindows(forMonitor: displayID, log: false)
+        guard !currentWindows.isEmpty else { return false }
+
+        for space in spaces {
+            if layoutMatches(space: space, currentWindows: currentWindows) {
+                if activeSpaces[displayID] != space.number {
+                    activateSpace(space, forMonitor: displayID)
+                }
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private func layoutMatches(space: VirtualSpace, currentWindows: [VirtualSpaceWindow]) -> Bool {
+        // Must be exact same number of windows
+        guard space.windows.count == currentWindows.count else { return false }
+
+        let savedIDs = space.windows.compactMap { window -> WindowIDSignature? in
+            guard let windowID = window.windowID else { return nil }
+            return WindowIDSignature(bundleID: window.appBundleID, windowID: windowID)
+        }
+        let currentIDs = currentWindows.compactMap { window -> WindowIDSignature? in
+            guard let windowID = window.windowID else { return nil }
+            return WindowIDSignature(bundleID: window.appBundleID, windowID: windowID)
+        }
+
+        // If all windows have IDs, match by (bundleID, windowID)
+        if savedIDs.count == space.windows.count && currentIDs.count == currentWindows.count {
+            return Set(savedIDs) == Set(currentIDs)
+        }
+
+        // Fallback: match by bundleID + frame (tolerant)
+        return matchByFrame(saved: space.windows, current: currentWindows, tolerance: 10)
+    }
+
+    private func matchByFrame(saved: [VirtualSpaceWindow], current: [VirtualSpaceWindow], tolerance: CGFloat) -> Bool {
+        var remaining = current
+
+        for savedWindow in saved {
+            guard let index = remaining.firstIndex(where: { candidate in
+                candidate.appBundleID == savedWindow.appBundleID &&
+                framesApproximatelyEqual(candidate.frame, savedWindow.frame, tolerance: tolerance)
+            }) else {
+                return false
+            }
+            remaining.remove(at: index)
+        }
+
+        return remaining.isEmpty
+    }
+
+    private func framesApproximatelyEqual(_ lhs: CGRect, _ rhs: CGRect, tolerance: CGFloat) -> Bool {
+        abs(lhs.origin.x - rhs.origin.x) <= tolerance &&
+        abs(lhs.origin.y - rhs.origin.y) <= tolerance &&
+        abs(lhs.size.width - rhs.size.width) <= tolerance &&
+        abs(lhs.size.height - rhs.size.height) <= tolerance
     }
 
     // MARK: - Helpers

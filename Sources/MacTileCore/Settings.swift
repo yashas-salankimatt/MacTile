@@ -388,6 +388,8 @@ public struct VirtualSpaceWindow: Codable, Equatable {
     public var appBundleID: String
     /// Window title (for identification)
     public var windowTitle: String
+    /// Window ID from CGWindowList (stable while window exists)
+    public var windowID: UInt32?
     /// Window frame in screen coordinates
     public var frame: CGRect
     /// Z-order index (0 = topmost/frontmost)
@@ -396,11 +398,13 @@ public struct VirtualSpaceWindow: Codable, Equatable {
     public init(
         appBundleID: String,
         windowTitle: String,
+        windowID: UInt32? = nil,
         frame: CGRect,
         zIndex: Int
     ) {
         self.appBundleID = appBundleID
         self.windowTitle = windowTitle
+        self.windowID = windowID
         self.frame = frame
         self.zIndex = zIndex
     }

@@ -77,47 +77,29 @@ class FocusManager {
         }
 
         let pid = app.processIdentifier
-
-        // Check if this app is already frontmost (unless forceCycle is set)
         let isFrontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundleID
 
+        // Get cyclable windows (standard windows with close button, excludes Finder Desktop etc.)
+        let cyclableWindows = getCyclableWindows(for: pid)
+
+        // If no cyclable windows and openIfNotRunning is enabled, open a new window.
+        // This handles apps like Finder that are always running but may have no open windows.
+        if cyclableWindows.isEmpty && openIfNotRunning {
+            return launchApp(bundleID: bundleID)
+        }
+
+        // If app is not frontmost, just activate it (will show its frontmost window)
         if !isFrontmost && !forceCycle {
-            // App is not frontmost - just activate it (will show frontmost window)
-            print("[FocusManager] Activating app: \(bundleID)")
             app.activate(options: [.activateIgnoringOtherApps])
             return true
         }
 
-        if forceCycle {
-            print("[FocusManager] Force cycling enabled for \(bundleID)")
-        }
-
-        // App is already frontmost - cycle to next window using AX API
-        // AX windows are in Z-order (front to back), so to cycle we raise the second window
-        let appElement = AXUIElementCreateApplication(pid)
-
-        var windowListRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windowListRef) == .success,
-              let axWindows = windowListRef as? [AXUIElement] else {
-            print("[FocusManager] No AX windows for \(bundleID)")
-            return true
-        }
-
-        // Filter to only include "standard" windows that have a close button.
-        // This excludes special windows like Finder's Desktop, which appears as an AXWindow
-        // but cannot be raised/cycled in the normal sense.
-        let cyclableWindows = axWindows.filter { window in
-            var closeButtonRef: CFTypeRef?
-            let result = AXUIElementCopyAttributeValue(window, kAXCloseButtonAttribute as CFString, &closeButtonRef)
-            return result == .success && closeButtonRef != nil
-        }
-
+        // App is frontmost (or forceCycle) - cycle to next window if more than one
         guard cyclableWindows.count > 1 else {
-            print("[FocusManager] Only \(cyclableWindows.count) cyclable window(s) for \(bundleID) (filtered from \(axWindows.count) total), nothing to cycle")
             return true
         }
 
-        print("[FocusManager] Found \(cyclableWindows.count) cyclable windows for \(bundleID) (from \(axWindows.count) total), cycling to next")
+        print("[FocusManager] Cycling through \(cyclableWindows.count) windows for \(bundleID)")
 
         // Raise the LAST window - this properly cycles through all windows
         // AX windows are in Z-order: [front, ..., back]
@@ -153,6 +135,23 @@ class FocusManager {
                 return (bundleID: bundleID, name: app.localizedName ?? bundleID)
             }
             .sorted { $0.name.lowercased() < $1.name.lowercased() }
+    }
+
+    /// Get cyclable windows for a process (windows with close button)
+    private func getCyclableWindows(for pid: pid_t) -> [AXUIElement] {
+        let appElement = AXUIElementCreateApplication(pid)
+
+        var windowListRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windowListRef) == .success,
+              let axWindows = windowListRef as? [AXUIElement] else {
+            return []
+        }
+
+        return axWindows.filter { window in
+            var closeButtonRef: CFTypeRef?
+            let result = AXUIElementCopyAttributeValue(window, kAXCloseButtonAttribute as CFString, &closeButtonRef)
+            return result == .success && closeButtonRef != nil
+        }
     }
 
     /// Launch an application by its bundle ID

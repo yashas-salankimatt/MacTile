@@ -171,6 +171,22 @@ class OverlayWindowController: NSWindowController {
         gridView.onPreviousMonitor = { [weak self] in
             self?.moveToPreviousMonitor()
         }
+        gridView.onVirtualSpaceRestore = { [weak self] spaceNumber in
+            guard let self = self,
+                  SettingsManager.shared.settings.virtualSpacesEnabled,
+                  let screen = self.currentScreen else { return }
+            let displayID = VirtualSpaceManager.displayID(for: screen)
+            VirtualSpaceManager.shared.restoreFromSpace(number: spaceNumber, forMonitor: displayID)
+            self.hideOverlay(cancelled: false)
+        }
+        gridView.onVirtualSpaceSave = { [weak self] spaceNumber in
+            guard let self = self,
+                  SettingsManager.shared.settings.virtualSpacesEnabled,
+                  let screen = self.currentScreen else { return }
+            let displayID = VirtualSpaceManager.displayID(for: screen)
+            VirtualSpaceManager.shared.saveToSpace(number: spaceNumber, forMonitor: displayID)
+            self.hideOverlay(cancelled: false)
+        }
         contentView.addSubview(gridView)
         self.gridView = gridView
 
@@ -559,6 +575,8 @@ class GridOverlayView: NSView {
     var onNextMonitor: (() -> Void)?
     var onPreviousMonitor: (() -> Void)?
     var onFocusPresetActivated: ((String) -> Void)?  // Called with bundle ID when focus preset is used
+    var onVirtualSpaceRestore: ((Int) -> Void)?
+    var onVirtualSpaceSave: ((Int) -> Void)?
 
     private var isSelecting = false
     private var selectionAnchor: GridOffset?
@@ -830,6 +848,18 @@ class GridOverlayView: NSView {
             eventModifiers |= KeyboardShortcut.Modifiers.command
         }
 
+        // Virtual space overlay triggers: number = restore, Shift+number = save
+        if let spaceNumber = keyCodeToSpaceNumber(event.keyCode) {
+            if eventModifiers == KeyboardShortcut.Modifiers.none {
+                onVirtualSpaceRestore?(spaceNumber)
+                return
+            }
+            if eventModifiers == KeyboardShortcut.Modifiers.shift {
+                onVirtualSpaceSave?(spaceNumber)
+                return
+            }
+        }
+
         // Check for tiling presets (now supports modifiers)
         for (presetIndex, preset) in tilingPresets.enumerated() {
             if preset.matches(keyCode: event.keyCode, modifiers: eventModifiers) {
@@ -995,6 +1025,22 @@ class GridOverlayView: NSView {
         // Unhandled key
         print("Unhandled key code: \(event.keyCode)")
         super.keyDown(with: event)
+    }
+
+    private func keyCodeToSpaceNumber(_ keyCode: UInt16) -> Int? {
+        switch keyCode {
+        case 29: return 0
+        case 18: return 1
+        case 19: return 2
+        case 20: return 3
+        case 21: return 4
+        case 23: return 5
+        case 22: return 6
+        case 26: return 7
+        case 28: return 8
+        case 25: return 9
+        default: return nil
+        }
     }
 
     private func cycleGridSize() {
