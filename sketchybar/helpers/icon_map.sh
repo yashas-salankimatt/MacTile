@@ -228,7 +228,7 @@ function __icon_map() {
    "coconutBattery")
         icon_result=":coconut_battery:"
         ;;
-   "Code" | "Code - Insiders" | "Electron")
+   "Code" | "Code - Insiders" | "Electron" | "Visual Studio Code")
         icon_result=":code:"
         ;;
    "Cold Turkey Blocker")
@@ -541,7 +541,7 @@ function __icon_map() {
         icon_result=":iris:"
         ;;
    "iTerm" | "iTerm2")
-        icon_result=":iterm:"
+        icon_result=":terminal:"
         ;;
    "Product Portal" | "iZotope RX 9" | "iZotope RX 10" | "iZotope RX 11" | "iZotope RX 12" | "iZotope Ozone 9" | "iZotope Ozone 10" | "iZotope Ozone 11" | "iZotope Ozone 12")
         icon_result=":izotope:"
