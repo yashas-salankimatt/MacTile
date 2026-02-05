@@ -32,11 +32,16 @@ class VirtualSpaceManager {
     /// Throttle layout matching checks per monitor
     private var lastLayoutCheck: [UInt32: Date] = [:]
     private let layoutCheckInterval: TimeInterval = 0.3
+    private let layoutCheckDelay: TimeInterval = 0.1
+    private var pendingLayoutChecks: [UInt32: DispatchWorkItem] = [:]
 
-    private init() {}
+    private init() {
+        ensureActivationObserver()
+    }
 
     deinit {
         stopMonitoring()
+        removeActivationObserver()
     }
 
     // MARK: - Coordinate System Helpers
@@ -536,10 +541,26 @@ class VirtualSpaceManager {
 
     /// Start monitoring for deactivation triggers
     private func startMonitoring() {
-        // Only set up observers once
+        ensureActivationObserver()
+
+        // Start timer to check for window changes (only one)
+        if windowCheckTimer == nil {
+            windowCheckTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                self?.checkForWindowChanges()
+            }
+        }
+    }
+
+    /// Stop monitoring
+    private func stopMonitoring() {
+        windowCheckTimer?.invalidate()
+        windowCheckTimer = nil
+    }
+
+    /// Ensure activation observer is always active (lightweight)
+    private func ensureActivationObserver() {
         if focusObserver != nil { return }
 
-        // Monitor for app activation changes
         focusObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil,
@@ -547,22 +568,13 @@ class VirtualSpaceManager {
         ) { [weak self] notification in
             self?.handleAppActivation(notification)
         }
-
-        // Start timer to check for window changes
-        windowCheckTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            self?.checkForWindowChanges()
-        }
     }
 
-    /// Stop monitoring
-    private func stopMonitoring() {
+    private func removeActivationObserver() {
         if let observer = focusObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
             focusObserver = nil
         }
-
-        windowCheckTimer?.invalidate()
-        windowCheckTimer = nil
     }
 
     /// Handle app activation notification
@@ -572,16 +584,24 @@ class VirtualSpaceManager {
             return
         }
 
+        guard SettingsManager.shared.settings.virtualSpacesEnabled else {
+            return
+        }
+
         // Ignore MacTile's own windows (overlay, settings, rename modal)
         if bundleID == Bundle.main.bundleIdentifier {
             return
         }
 
         // Attempt to re-activate a matching space for the focused monitor
-        if let focusedWindow = RealWindowManager.shared.getFocusedWindow() {
-            let center = CGPoint(x: focusedWindow.frame.midX, y: focusedWindow.frame.midY)
-            let displayID = VirtualSpaceManager.displayIDForPoint(center)
-            _ = attemptAutoActivateSpace(forMonitor: displayID)
+        if let displayID = displayIDForActivatedApp(app) {
+            scheduleLayoutCheck(forMonitor: displayID)
+        } else {
+            // Fall back to checking all monitors (throttled)
+            for screen in NSScreen.screens {
+                let id = VirtualSpaceManager.displayID(for: screen)
+                scheduleLayoutCheck(forMonitor: id)
+            }
         }
 
         // Check each active space to see if the focused app is part of it
@@ -638,35 +658,76 @@ class VirtualSpaceManager {
         let windowID: UInt32
     }
 
+    /// Determine which monitor the activated app's frontmost window is on, using CGWindowList.
+    private func displayIDForActivatedApp(_ app: NSRunningApplication) -> UInt32? {
+        let windowListOptions: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+        guard let windowList = CGWindowListCopyWindowInfo(windowListOptions, kCGNullWindowID) as? [[String: Any]] else {
+            return nil
+        }
+
+        for windowInfo in windowList {
+            guard let pid = windowInfo[kCGWindowOwnerPID as String] as? pid_t,
+                  pid == app.processIdentifier else {
+                continue
+            }
+
+            guard let layer = windowInfo[kCGWindowLayer as String] as? Int,
+                  layer == 0 else {
+                continue
+            }
+
+            guard let boundsDict = windowInfo[kCGWindowBounds as String] as? [String: CGFloat],
+                  let x = boundsDict["X"],
+                  let y = boundsDict["Y"],
+                  let width = boundsDict["Width"],
+                  let height = boundsDict["Height"] else {
+                continue
+            }
+
+            let windowFrame = CGRect(
+                x: x,
+                y: self.primaryScreenHeight - y - height,
+                width: width,
+                height: height
+            )
+            let windowCenter = CGPoint(x: windowFrame.midX, y: windowFrame.midY)
+            return VirtualSpaceManager.displayIDForPoint(windowCenter)
+        }
+
+        return nil
+    }
+
     /// Attempt to auto-activate a space if the current visible windows exactly match a saved space.
-    /// Returns true if a match was found (and activated or already active).
-    private func attemptAutoActivateSpace(forMonitor displayID: UInt32) -> Bool {
-        guard SettingsManager.shared.settings.virtualSpacesEnabled else { return false }
+    /// Returns nil if a check was performed, or the remaining delay if throttled.
+    private func attemptAutoActivateSpace(forMonitor displayID: UInt32) -> TimeInterval? {
+        guard SettingsManager.shared.settings.virtualSpacesEnabled else { return nil }
 
         let now = Date()
-        if let lastCheck = lastLayoutCheck[displayID],
-           now.timeIntervalSince(lastCheck) < layoutCheckInterval {
-            return false
+        if let lastCheck = lastLayoutCheck[displayID] {
+            let elapsed = now.timeIntervalSince(lastCheck)
+            if elapsed < layoutCheckInterval {
+                return max(0, layoutCheckInterval - elapsed)
+            }
         }
         lastLayoutCheck[displayID] = now
 
         let spaces = SettingsManager.shared.settings.virtualSpaces.getNonEmptySpaces(displayID: displayID)
             .sorted { $0.number < $1.number }
-        guard !spaces.isEmpty else { return false }
+        guard !spaces.isEmpty else { return nil }
 
         let currentWindows = captureTopmostWindows(forMonitor: displayID, log: false)
-        guard !currentWindows.isEmpty else { return false }
+        guard !currentWindows.isEmpty else { return nil }
 
         for space in spaces {
             if layoutMatches(space: space, currentWindows: currentWindows) {
                 if activeSpaces[displayID] != space.number {
                     activateSpace(space, forMonitor: displayID)
                 }
-                return true
+                return nil
             }
         }
 
-        return false
+        return nil
     }
 
     private func layoutMatches(space: VirtualSpace, currentWindows: [VirtualSpaceWindow]) -> Bool {
@@ -712,6 +773,24 @@ class VirtualSpaceManager {
         abs(lhs.origin.y - rhs.origin.y) <= tolerance &&
         abs(lhs.size.width - rhs.size.width) <= tolerance &&
         abs(lhs.size.height - rhs.size.height) <= tolerance
+    }
+
+    private func scheduleLayoutCheck(forMonitor displayID: UInt32, delay: TimeInterval? = nil) {
+        let delaySeconds = delay ?? layoutCheckDelay
+
+        if let existing = pendingLayoutChecks[displayID] {
+            existing.cancel()
+        }
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            if let retryDelay = self.attemptAutoActivateSpace(forMonitor: displayID) {
+                self.scheduleLayoutCheck(forMonitor: displayID, delay: retryDelay)
+            }
+        }
+
+        pendingLayoutChecks[displayID] = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + delaySeconds, execute: workItem)
     }
 
     // MARK: - Helpers
