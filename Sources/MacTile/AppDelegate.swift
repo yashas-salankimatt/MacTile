@@ -16,6 +16,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, VirtualSpaceManagerDelegate 
     // Virtual space rename panel
     private var renamePanel: NSPanel?
 
+    // Distributed notification observer for IPC
+    private var distributedNotificationObserver: NSObjectProtocol?
+    private var distributedClearNotificationObserver: NSObjectProtocol?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         print("MacTile launched")
 
@@ -46,6 +50,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, VirtualSpaceManagerDelegate 
         // Observe settings changes
         observeSettings()
 
+        // Set up distributed notification observer for IPC (sketchybar, CLI, etc.)
+        setupDistributedNotifications()
+
         let settings = SettingsManager.shared.settings
         let shortcut = settings.toggleOverlayShortcut.displayString
         if let secondary = settings.secondaryToggleOverlayShortcut {
@@ -63,6 +70,89 @@ class AppDelegate: NSObject, NSApplicationDelegate, VirtualSpaceManagerDelegate 
         ) { [weak self] _ in
             self?.handleSettingsChanged()
         }
+    }
+
+    // MARK: - Distributed Notifications (IPC)
+
+    private func setupDistributedNotifications() {
+        // Listen for restore space requests from external tools (sketchybar, CLI, etc.)
+        distributedNotificationObserver = DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.mactile.MacTile.restoreSpace"),
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            self?.handleRestoreSpaceNotification(notification)
+        }
+
+        // Listen for clear space requests from external tools (sketchybar, CLI, etc.)
+        distributedClearNotificationObserver = DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.mactile.MacTile.clearSpace"),
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            self?.handleClearSpaceNotification(notification)
+        }
+        print("[IPC] Listening for distributed notifications")
+    }
+
+    private func handleRestoreSpaceNotification(_ notification: Notification) {
+        // Only process IPC when sketchybar integration is enabled
+        // This prevents arbitrary processes from triggering space restores
+        guard SettingsManager.shared.settings.sketchybarIntegrationEnabled else {
+            print("[IPC] Ignoring restore notification - sketchybar integration disabled")
+            return
+        }
+
+        guard let userInfo = notification.userInfo,
+              let spaceNumberAny = userInfo["space"],
+              let spaceNumber = spaceNumberAny as? Int ?? Int(spaceNumberAny as? String ?? "") else {
+            print("[IPC] Invalid restore space notification - missing or invalid space number")
+            return
+        }
+
+        print("[IPC] Received restore space request for space \(spaceNumber)")
+
+        // Get monitor - default to current
+        let displayID: UInt32
+        if let monitorAny = userInfo["monitor"],
+           let monitor = monitorAny as? UInt32 ?? UInt32(monitorAny as? String ?? "") {
+            displayID = monitor
+        } else {
+            displayID = getCurrentDisplayID()
+        }
+
+        // Restore the space
+        VirtualSpaceManager.shared.restoreFromSpace(number: spaceNumber, forMonitor: displayID)
+    }
+
+    private func handleClearSpaceNotification(_ notification: Notification) {
+        // Only process IPC when sketchybar integration is enabled
+        // This prevents arbitrary processes from triggering space clears
+        guard SettingsManager.shared.settings.sketchybarIntegrationEnabled else {
+            print("[IPC] Ignoring clear notification - sketchybar integration disabled")
+            return
+        }
+
+        guard let userInfo = notification.userInfo,
+              let spaceNumberAny = userInfo["space"],
+              let spaceNumber = spaceNumberAny as? Int ?? Int(spaceNumberAny as? String ?? "") else {
+            print("[IPC] Invalid clear space notification - missing or invalid space number")
+            return
+        }
+
+        print("[IPC] Received clear space request for space \(spaceNumber)")
+
+        // Get monitor - default to current
+        let displayID: UInt32
+        if let monitorAny = userInfo["monitor"],
+           let monitor = monitorAny as? UInt32 ?? UInt32(monitorAny as? String ?? "") {
+            displayID = monitor
+        } else {
+            displayID = getCurrentDisplayID()
+        }
+
+        // Clear the space
+        VirtualSpaceManager.shared.clearSpace(number: spaceNumber, forMonitor: displayID)
     }
 
     private func handleSettingsChanged() {
@@ -315,6 +405,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, VirtualSpaceManagerDelegate 
         // Convert our modifier flags to NSEvent.ModifierFlags
         let saveModifiers = modifiersFromFlags(settings.virtualSpaceSaveModifiers)
         let restoreModifiers = modifiersFromFlags(settings.virtualSpaceRestoreModifiers)
+        let clearModifiers = modifiersFromFlags(settings.virtualSpaceClearModifiers)
 
         // Key codes for numbers 0-9
         // 0=29, 1=18, 2=19, 3=20, 4=21, 5=23, 6=22, 7=26, 8=28, 9=25
@@ -345,6 +436,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, VirtualSpaceManagerDelegate 
                 self?.saveToVirtualSpace(number: spaceNumber)
             }
             virtualSpaceHotKeys.append(saveKey)
+
+            // Clear: configurable modifiers + N
+            let clearKey = HotKey(key: key, modifiers: clearModifiers)
+            clearKey.keyDownHandler = { [weak self] in
+                self?.clearVirtualSpace(number: spaceNumber)
+            }
+            virtualSpaceHotKeys.append(clearKey)
         }
 
         // Rename: use restore modifiers + Comma
@@ -354,7 +452,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, VirtualSpaceManagerDelegate 
         }
         virtualSpaceHotKeys.append(renameKey)
 
-        print("Registered \(virtualSpaceHotKeys.count) virtual space hotkeys (save: \(OverlayKeyboardSettings.modifierDisplayString(settings.virtualSpaceSaveModifiers)), restore: \(OverlayKeyboardSettings.modifierDisplayString(settings.virtualSpaceRestoreModifiers)))")
+        print("Registered \(virtualSpaceHotKeys.count) virtual space hotkeys (save: \(OverlayKeyboardSettings.modifierDisplayString(settings.virtualSpaceSaveModifiers)), restore: \(OverlayKeyboardSettings.modifierDisplayString(settings.virtualSpaceRestoreModifiers)), clear: \(OverlayKeyboardSettings.modifierDisplayString(settings.virtualSpaceClearModifiers)))")
     }
 
     /// Convert our UInt modifier flags to NSEvent.ModifierFlags
@@ -387,6 +485,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, VirtualSpaceManagerDelegate 
         // Get the currently focused screen
         let displayID = getCurrentDisplayID()
         VirtualSpaceManager.shared.restoreFromSpace(number: number, forMonitor: displayID)
+    }
+
+    private func clearVirtualSpace(number: Int) {
+        // Get the currently focused screen
+        let displayID = getCurrentDisplayID()
+        VirtualSpaceManager.shared.clearSpace(number: number, forMonitor: displayID)
     }
 
     private func renameActiveVirtualSpace() {
@@ -598,6 +702,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, VirtualSpaceManagerDelegate 
     func applicationWillTerminate(_ notification: Notification) {
         if let observer = settingsObserver {
             NotificationCenter.default.removeObserver(observer)
+        }
+        if let observer = distributedNotificationObserver {
+            DistributedNotificationCenter.default().removeObserver(observer)
+        }
+        if let observer = distributedClearNotificationObserver {
+            DistributedNotificationCenter.default().removeObserver(observer)
         }
         print("MacTile terminating")
     }

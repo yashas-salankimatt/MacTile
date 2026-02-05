@@ -480,6 +480,19 @@ public struct VirtualSpace: Codable, Equatable {
     public static func empty(number: Int, displayID: UInt32) -> VirtualSpace {
         return VirtualSpace(number: number, displayID: displayID)
     }
+
+    /// Returns unique app bundle IDs in this space (preserving z-order, topmost first)
+    public var uniqueAppBundleIDs: [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for window in windowsByZOrder {
+            if !seen.contains(window.appBundleID) {
+                seen.insert(window.appBundleID)
+                result.append(window.appBundleID)
+            }
+        }
+        return result
+    }
 }
 
 // MARK: - Virtual Spaces Storage
@@ -522,6 +535,23 @@ public struct VirtualSpacesStorage: Codable, Equatable {
     /// Get all non-empty spaces for a monitor
     public func getNonEmptySpaces(displayID: UInt32) -> [VirtualSpace] {
         return getSpaces(displayID: displayID).filter { !$0.isEmpty }
+    }
+
+    /// Clear (remove) a virtual space for a monitor
+    public mutating func clearSpace(displayID: UInt32, number: Int) {
+        let displayKey = String(displayID)
+        let numberKey = String(number)
+        spacesByMonitor[displayKey]?.removeValue(forKey: numberKey)
+    }
+
+    /// Get the space numbers that have saved content for a display
+    public func getSetSpaceNumbers(displayID: UInt32) -> [Int] {
+        let displayKey = String(displayID)
+        guard let spaces = spacesByMonitor[displayKey] else { return [] }
+        return spaces.compactMap { (key, space) -> Int? in
+            guard !space.isEmpty else { return nil }
+            return Int(key)
+        }.sorted()
     }
 }
 
@@ -666,6 +696,25 @@ public struct MacTileSettings: Equatable {
     /// Modifiers for restoring virtual spaces (default: Control+Option)
     public var virtualSpaceRestoreModifiers: UInt
 
+    /// Modifiers for clearing virtual spaces (default: Option+Shift)
+    public var virtualSpaceClearModifiers: UInt
+
+    /// Modifiers for saving virtual spaces while overlay is active (default: Shift)
+    public var overlayVirtualSpaceSaveModifiers: UInt
+
+    /// Modifiers for clearing virtual spaces while overlay is active (default: Option+Shift)
+    public var overlayVirtualSpaceClearModifiers: UInt
+
+    // MARK: - Sketchybar Integration
+
+    /// Whether to notify sketchybar when virtual spaces change
+    public var sketchybarIntegrationEnabled: Bool
+
+    /// Custom command to run on virtual space change (optional)
+    /// If nil, uses default: sketchybar --trigger mactile_space_change ...
+    /// Environment variables available: MACTILE_SPACE, MACTILE_SPACE_NAME, MACTILE_MONITOR, MACTILE_ACTION, MACTILE_APPS
+    public var sketchybarCommand: String?
+
     // MARK: - Default Values
 
     public static let defaultGridSizes = [
@@ -683,6 +732,18 @@ public struct MacTileSettings: Equatable {
     /// Default modifiers for restoring virtual spaces (Control+Option)
     public static let defaultVirtualSpaceRestoreModifiers: UInt =
         KeyboardShortcut.Modifiers.control | KeyboardShortcut.Modifiers.option
+
+    /// Default modifiers for clearing virtual spaces (Option+Shift)
+    public static let defaultVirtualSpaceClearModifiers: UInt =
+        KeyboardShortcut.Modifiers.option | KeyboardShortcut.Modifiers.shift
+
+    /// Default modifiers for saving virtual spaces in overlay (Shift)
+    public static let defaultOverlayVirtualSpaceSaveModifiers: UInt =
+        KeyboardShortcut.Modifiers.shift
+
+    /// Default modifiers for clearing virtual spaces in overlay (Option+Shift)
+    public static let defaultOverlayVirtualSpaceClearModifiers: UInt =
+        KeyboardShortcut.Modifiers.option | KeyboardShortcut.Modifiers.shift
 
     /// Default tiling presets for quick window positioning
     public static let defaultTilingPresets: [TilingPreset] = [
@@ -756,7 +817,12 @@ public struct MacTileSettings: Equatable {
         virtualSpaces: VirtualSpacesStorage(),
         virtualSpacesEnabled: true,
         virtualSpaceSaveModifiers: defaultVirtualSpaceSaveModifiers,
-        virtualSpaceRestoreModifiers: defaultVirtualSpaceRestoreModifiers
+        virtualSpaceRestoreModifiers: defaultVirtualSpaceRestoreModifiers,
+        virtualSpaceClearModifiers: defaultVirtualSpaceClearModifiers,
+        overlayVirtualSpaceSaveModifiers: defaultOverlayVirtualSpaceSaveModifiers,
+        overlayVirtualSpaceClearModifiers: defaultOverlayVirtualSpaceClearModifiers,
+        sketchybarIntegrationEnabled: false,
+        sketchybarCommand: nil
     )
 
     public init(
@@ -778,7 +844,12 @@ public struct MacTileSettings: Equatable {
         virtualSpaces: VirtualSpacesStorage = VirtualSpacesStorage(),
         virtualSpacesEnabled: Bool = true,
         virtualSpaceSaveModifiers: UInt = defaultVirtualSpaceSaveModifiers,
-        virtualSpaceRestoreModifiers: UInt = defaultVirtualSpaceRestoreModifiers
+        virtualSpaceRestoreModifiers: UInt = defaultVirtualSpaceRestoreModifiers,
+        virtualSpaceClearModifiers: UInt = defaultVirtualSpaceClearModifiers,
+        overlayVirtualSpaceSaveModifiers: UInt = defaultOverlayVirtualSpaceSaveModifiers,
+        overlayVirtualSpaceClearModifiers: UInt = defaultOverlayVirtualSpaceClearModifiers,
+        sketchybarIntegrationEnabled: Bool = false,
+        sketchybarCommand: String? = nil
     ) {
         self.gridSizes = gridSizes.isEmpty ? Self.defaultGridSizes : gridSizes
         self.windowSpacing = max(0, windowSpacing)
@@ -800,6 +871,11 @@ public struct MacTileSettings: Equatable {
         self.virtualSpacesEnabled = virtualSpacesEnabled
         self.virtualSpaceSaveModifiers = virtualSpaceSaveModifiers
         self.virtualSpaceRestoreModifiers = virtualSpaceRestoreModifiers
+        self.virtualSpaceClearModifiers = virtualSpaceClearModifiers
+        self.overlayVirtualSpaceSaveModifiers = overlayVirtualSpaceSaveModifiers
+        self.overlayVirtualSpaceClearModifiers = overlayVirtualSpaceClearModifiers
+        self.sketchybarIntegrationEnabled = sketchybarIntegrationEnabled
+        self.sketchybarCommand = sketchybarCommand
     }
 }
 
@@ -811,7 +887,9 @@ extension MacTileSettings: Codable {
         case launchAtLogin, confirmOnClickWithoutDrag, showHelpText, showMonitorIndicator
         case toggleOverlayShortcut, secondaryToggleOverlayShortcut, overlayKeyboard
         case tilingPresets, focusPresets, appearance, virtualSpaces
-        case virtualSpacesEnabled, virtualSpaceSaveModifiers, virtualSpaceRestoreModifiers
+        case virtualSpacesEnabled, virtualSpaceSaveModifiers, virtualSpaceRestoreModifiers, virtualSpaceClearModifiers
+        case overlayVirtualSpaceSaveModifiers, overlayVirtualSpaceClearModifiers
+        case sketchybarIntegrationEnabled, sketchybarCommand
     }
 
     public init(from decoder: Decoder) throws {
@@ -839,6 +917,11 @@ extension MacTileSettings: Codable {
         virtualSpacesEnabled = try container.decodeIfPresent(Bool.self, forKey: .virtualSpacesEnabled) ?? true
         virtualSpaceSaveModifiers = try container.decodeIfPresent(UInt.self, forKey: .virtualSpaceSaveModifiers) ?? Self.defaultVirtualSpaceSaveModifiers
         virtualSpaceRestoreModifiers = try container.decodeIfPresent(UInt.self, forKey: .virtualSpaceRestoreModifiers) ?? Self.defaultVirtualSpaceRestoreModifiers
+        virtualSpaceClearModifiers = try container.decodeIfPresent(UInt.self, forKey: .virtualSpaceClearModifiers) ?? Self.defaultVirtualSpaceClearModifiers
+        overlayVirtualSpaceSaveModifiers = try container.decodeIfPresent(UInt.self, forKey: .overlayVirtualSpaceSaveModifiers) ?? Self.defaultOverlayVirtualSpaceSaveModifiers
+        overlayVirtualSpaceClearModifiers = try container.decodeIfPresent(UInt.self, forKey: .overlayVirtualSpaceClearModifiers) ?? Self.defaultOverlayVirtualSpaceClearModifiers
+        sketchybarIntegrationEnabled = try container.decodeIfPresent(Bool.self, forKey: .sketchybarIntegrationEnabled) ?? false
+        sketchybarCommand = try container.decodeIfPresent(String.self, forKey: .sketchybarCommand)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -863,6 +946,11 @@ extension MacTileSettings: Codable {
         try container.encode(virtualSpacesEnabled, forKey: .virtualSpacesEnabled)
         try container.encode(virtualSpaceSaveModifiers, forKey: .virtualSpaceSaveModifiers)
         try container.encode(virtualSpaceRestoreModifiers, forKey: .virtualSpaceRestoreModifiers)
+        try container.encode(virtualSpaceClearModifiers, forKey: .virtualSpaceClearModifiers)
+        try container.encode(overlayVirtualSpaceSaveModifiers, forKey: .overlayVirtualSpaceSaveModifiers)
+        try container.encode(overlayVirtualSpaceClearModifiers, forKey: .overlayVirtualSpaceClearModifiers)
+        try container.encode(sketchybarIntegrationEnabled, forKey: .sketchybarIntegrationEnabled)
+        try container.encodeIfPresent(sketchybarCommand, forKey: .sketchybarCommand)
     }
 }
 

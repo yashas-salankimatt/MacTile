@@ -651,3 +651,151 @@ final class DefaultTilingPresetsTests: XCTestCase {
         }
     }
 }
+
+// MARK: - Sketchybar Integration Tests
+
+final class SketchybarIntegrationSettingsTests: XCTestCase {
+
+    func testSketchybarIntegrationDisabledByDefault() {
+        let defaults = MacTileSettings.default
+        XCTAssertFalse(defaults.sketchybarIntegrationEnabled, "Sketchybar integration should be disabled by default")
+    }
+
+    func testSketchybarCommandNilByDefault() {
+        let defaults = MacTileSettings.default
+        XCTAssertNil(defaults.sketchybarCommand, "Sketchybar command should be nil by default")
+    }
+
+    func testSketchybarSettingsCodable() throws {
+        var settings = MacTileSettings.default
+        settings.sketchybarIntegrationEnabled = true
+        settings.sketchybarCommand = "custom_command --trigger event"
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(settings)
+
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(MacTileSettings.self, from: data)
+
+        XCTAssertTrue(decoded.sketchybarIntegrationEnabled)
+        XCTAssertEqual(decoded.sketchybarCommand, "custom_command --trigger event")
+    }
+
+    func testSketchybarSettingsBackwardCompatibility() throws {
+        // Simulate loading settings from an older version without sketchybar fields
+        let oldSettingsJSON = """
+        {
+            "gridSizes": [{"cols": 8, "rows": 2}],
+            "windowSpacing": 0,
+            "insets": {"top": 0, "left": 0, "bottom": 0, "right": 0},
+            "autoClose": true,
+            "showMenuBarIcon": true,
+            "launchAtLogin": false,
+            "confirmOnClickWithoutDrag": true,
+            "showHelpText": true,
+            "showMonitorIndicator": true,
+            "toggleOverlayShortcut": {"keyCode": 5, "modifiers": 3, "keyString": "G"},
+            "overlayKeyboard": {
+                "panModifier": 0,
+                "anchorModifier": 4,
+                "targetModifier": 2,
+                "applyKeyCode": 36,
+                "cancelKeyCode": 53,
+                "cycleGridKeyCode": 49
+            },
+            "tilingPresets": [],
+            "focusPresets": [],
+            "appearance": {
+                "overlayBackgroundColor": {"red": 0, "green": 0, "blue": 0, "alpha": 1},
+                "overlayOpacity": 0.4,
+                "gridLineColor": {"red": 1, "green": 1, "blue": 1, "alpha": 1},
+                "gridLineOpacity": 0.3,
+                "gridLineWidth": 1.0,
+                "selectionFillColor": {"red": 0, "green": 0.478, "blue": 1, "alpha": 1},
+                "selectionFillOpacity": 0.4,
+                "selectionBorderColor": {"red": 0, "green": 0.478, "blue": 1, "alpha": 1},
+                "selectionBorderWidth": 3.0,
+                "anchorMarkerColor": {"red": 0.204, "green": 0.780, "blue": 0.349, "alpha": 1},
+                "targetMarkerColor": {"red": 1, "green": 0.584, "blue": 0, "alpha": 1}
+            }
+        }
+        """
+
+        let decoder = JSONDecoder()
+        let data = oldSettingsJSON.data(using: .utf8)!
+        let decoded = try decoder.decode(MacTileSettings.self, from: data)
+
+        // Should use default values for missing fields
+        XCTAssertFalse(decoded.sketchybarIntegrationEnabled, "Should default to false when missing")
+        XCTAssertNil(decoded.sketchybarCommand, "Should default to nil when missing")
+    }
+}
+
+// MARK: - VirtualSpace uniqueAppBundleIDs Tests
+
+final class VirtualSpaceAppBundleIDsTests: XCTestCase {
+
+    func testUniqueAppBundleIDsEmpty() {
+        let space = VirtualSpace(number: 1, windows: [], displayID: 1)
+        XCTAssertTrue(space.uniqueAppBundleIDs.isEmpty)
+    }
+
+    func testUniqueAppBundleIDsSingleWindow() {
+        let windows = [
+            VirtualSpaceWindow(appBundleID: "com.apple.Safari", windowTitle: "Safari", frame: .zero, zIndex: 0)
+        ]
+        let space = VirtualSpace(number: 1, windows: windows, displayID: 1)
+
+        XCTAssertEqual(space.uniqueAppBundleIDs, ["com.apple.Safari"])
+    }
+
+    func testUniqueAppBundleIDsMultipleApps() {
+        let windows = [
+            VirtualSpaceWindow(appBundleID: "com.apple.Safari", windowTitle: "Safari", frame: .zero, zIndex: 0),
+            VirtualSpaceWindow(appBundleID: "com.microsoft.VSCode", windowTitle: "Code", frame: .zero, zIndex: 1),
+            VirtualSpaceWindow(appBundleID: "com.apple.Terminal", windowTitle: "Terminal", frame: .zero, zIndex: 2)
+        ]
+        let space = VirtualSpace(number: 1, windows: windows, displayID: 1)
+
+        let bundleIDs = space.uniqueAppBundleIDs
+        XCTAssertEqual(bundleIDs.count, 3)
+        // Should be in z-order (topmost first)
+        XCTAssertEqual(bundleIDs[0], "com.apple.Safari")
+        XCTAssertEqual(bundleIDs[1], "com.microsoft.VSCode")
+        XCTAssertEqual(bundleIDs[2], "com.apple.Terminal")
+    }
+
+    func testUniqueAppBundleIDsDeduplicates() {
+        // Multiple windows from same app should only appear once
+        let windows = [
+            VirtualSpaceWindow(appBundleID: "com.apple.Safari", windowTitle: "Tab 1", frame: .zero, zIndex: 0),
+            VirtualSpaceWindow(appBundleID: "com.apple.Safari", windowTitle: "Tab 2", frame: .zero, zIndex: 1),
+            VirtualSpaceWindow(appBundleID: "com.microsoft.VSCode", windowTitle: "Code", frame: .zero, zIndex: 2),
+            VirtualSpaceWindow(appBundleID: "com.apple.Safari", windowTitle: "Tab 3", frame: .zero, zIndex: 3)
+        ]
+        let space = VirtualSpace(number: 1, windows: windows, displayID: 1)
+
+        let bundleIDs = space.uniqueAppBundleIDs
+        XCTAssertEqual(bundleIDs.count, 2, "Should only have 2 unique bundle IDs")
+        XCTAssertEqual(bundleIDs[0], "com.apple.Safari", "Safari should be first (topmost window)")
+        XCTAssertEqual(bundleIDs[1], "com.microsoft.VSCode", "VSCode should be second")
+    }
+
+    func testUniqueAppBundleIDsPreservesZOrder() {
+        // The first occurrence of each app (in z-order) determines its position
+        let windows = [
+            VirtualSpaceWindow(appBundleID: "com.apple.Terminal", windowTitle: "Term", frame: .zero, zIndex: 0),
+            VirtualSpaceWindow(appBundleID: "com.apple.Safari", windowTitle: "Safari 1", frame: .zero, zIndex: 1),
+            VirtualSpaceWindow(appBundleID: "com.apple.Terminal", windowTitle: "Term 2", frame: .zero, zIndex: 2),
+            VirtualSpaceWindow(appBundleID: "com.microsoft.VSCode", windowTitle: "Code", frame: .zero, zIndex: 3)
+        ]
+        let space = VirtualSpace(number: 1, windows: windows, displayID: 1)
+
+        let bundleIDs = space.uniqueAppBundleIDs
+        XCTAssertEqual(bundleIDs, [
+            "com.apple.Terminal",      // First appears at zIndex 0
+            "com.apple.Safari",        // First appears at zIndex 1
+            "com.microsoft.VSCode"     // First appears at zIndex 3
+        ])
+    }
+}

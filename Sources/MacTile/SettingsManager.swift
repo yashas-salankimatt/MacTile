@@ -79,7 +79,12 @@ class SettingsManager {
             virtualSpaces: settings.virtualSpaces,
             virtualSpacesEnabled: settings.virtualSpacesEnabled,
             virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
-            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers,
+            virtualSpaceClearModifiers: settings.virtualSpaceClearModifiers,
+            overlayVirtualSpaceSaveModifiers: settings.overlayVirtualSpaceSaveModifiers,
+            overlayVirtualSpaceClearModifiers: settings.overlayVirtualSpaceClearModifiers,
+            sketchybarIntegrationEnabled: settings.sketchybarIntegrationEnabled,
+            sketchybarCommand: settings.sketchybarCommand
         )
         settings = newSettings
     }
@@ -104,7 +109,12 @@ class SettingsManager {
             virtualSpaces: settings.virtualSpaces,
             virtualSpacesEnabled: settings.virtualSpacesEnabled,
             virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
-            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers,
+            virtualSpaceClearModifiers: settings.virtualSpaceClearModifiers,
+            overlayVirtualSpaceSaveModifiers: settings.overlayVirtualSpaceSaveModifiers,
+            overlayVirtualSpaceClearModifiers: settings.overlayVirtualSpaceClearModifiers,
+            sketchybarIntegrationEnabled: settings.sketchybarIntegrationEnabled,
+            sketchybarCommand: settings.sketchybarCommand
         )
     }
 
@@ -128,7 +138,12 @@ class SettingsManager {
             virtualSpaces: settings.virtualSpaces,
             virtualSpacesEnabled: settings.virtualSpacesEnabled,
             virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
-            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers,
+            virtualSpaceClearModifiers: settings.virtualSpaceClearModifiers,
+            overlayVirtualSpaceSaveModifiers: settings.overlayVirtualSpaceSaveModifiers,
+            overlayVirtualSpaceClearModifiers: settings.overlayVirtualSpaceClearModifiers,
+            sketchybarIntegrationEnabled: settings.sketchybarIntegrationEnabled,
+            sketchybarCommand: settings.sketchybarCommand
         )
     }
 
@@ -152,7 +167,12 @@ class SettingsManager {
             virtualSpaces: settings.virtualSpaces,
             virtualSpacesEnabled: settings.virtualSpacesEnabled,
             virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
-            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers,
+            virtualSpaceClearModifiers: settings.virtualSpaceClearModifiers,
+            overlayVirtualSpaceSaveModifiers: settings.overlayVirtualSpaceSaveModifiers,
+            overlayVirtualSpaceClearModifiers: settings.overlayVirtualSpaceClearModifiers,
+            sketchybarIntegrationEnabled: settings.sketchybarIntegrationEnabled,
+            sketchybarCommand: settings.sketchybarCommand
         )
     }
 
@@ -176,7 +196,12 @@ class SettingsManager {
             virtualSpaces: settings.virtualSpaces,
             virtualSpacesEnabled: settings.virtualSpacesEnabled,
             virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
-            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers,
+            virtualSpaceClearModifiers: settings.virtualSpaceClearModifiers,
+            overlayVirtualSpaceSaveModifiers: settings.overlayVirtualSpaceSaveModifiers,
+            overlayVirtualSpaceClearModifiers: settings.overlayVirtualSpaceClearModifiers,
+            sketchybarIntegrationEnabled: settings.sketchybarIntegrationEnabled,
+            sketchybarCommand: settings.sketchybarCommand
         )
     }
 
@@ -200,7 +225,12 @@ class SettingsManager {
             virtualSpaces: settings.virtualSpaces,
             virtualSpacesEnabled: settings.virtualSpacesEnabled,
             virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
-            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers,
+            virtualSpaceClearModifiers: settings.virtualSpaceClearModifiers,
+            overlayVirtualSpaceSaveModifiers: settings.overlayVirtualSpaceSaveModifiers,
+            overlayVirtualSpaceClearModifiers: settings.overlayVirtualSpaceClearModifiers,
+            sketchybarIntegrationEnabled: settings.sketchybarIntegrationEnabled,
+            sketchybarCommand: settings.sketchybarCommand
         )
     }
 
@@ -224,7 +254,12 @@ class SettingsManager {
             virtualSpaces: settings.virtualSpaces,
             virtualSpacesEnabled: settings.virtualSpacesEnabled,
             virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
-            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers,
+            virtualSpaceClearModifiers: settings.virtualSpaceClearModifiers,
+            overlayVirtualSpaceSaveModifiers: settings.overlayVirtualSpaceSaveModifiers,
+            overlayVirtualSpaceClearModifiers: settings.overlayVirtualSpaceClearModifiers,
+            sketchybarIntegrationEnabled: settings.sketchybarIntegrationEnabled,
+            sketchybarCommand: settings.sketchybarCommand
         )
     }
 
@@ -248,7 +283,12 @@ class SettingsManager {
             virtualSpaces: settings.virtualSpaces,
             virtualSpacesEnabled: settings.virtualSpacesEnabled,
             virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
-            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers,
+            virtualSpaceClearModifiers: settings.virtualSpaceClearModifiers,
+            overlayVirtualSpaceSaveModifiers: settings.overlayVirtualSpaceSaveModifiers,
+            overlayVirtualSpaceClearModifiers: settings.overlayVirtualSpaceClearModifiers,
+            sketchybarIntegrationEnabled: settings.sketchybarIntegrationEnabled,
+            sketchybarCommand: settings.sketchybarCommand
         )
     }
 
@@ -272,7 +312,12 @@ class SettingsManager {
             virtualSpaces: settings.virtualSpaces,
             virtualSpacesEnabled: settings.virtualSpacesEnabled,
             virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
-            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers,
+            virtualSpaceClearModifiers: settings.virtualSpaceClearModifiers,
+            overlayVirtualSpaceSaveModifiers: settings.overlayVirtualSpaceSaveModifiers,
+            overlayVirtualSpaceClearModifiers: settings.overlayVirtualSpaceClearModifiers,
+            sketchybarIntegrationEnabled: settings.sketchybarIntegrationEnabled,
+            sketchybarCommand: settings.sketchybarCommand
         )
     }
 
@@ -296,7 +341,12 @@ class SettingsManager {
             virtualSpaces: settings.virtualSpaces,
             virtualSpacesEnabled: settings.virtualSpacesEnabled,
             virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
-            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers,
+            virtualSpaceClearModifiers: settings.virtualSpaceClearModifiers,
+            overlayVirtualSpaceSaveModifiers: settings.overlayVirtualSpaceSaveModifiers,
+            overlayVirtualSpaceClearModifiers: settings.overlayVirtualSpaceClearModifiers,
+            sketchybarIntegrationEnabled: settings.sketchybarIntegrationEnabled,
+            sketchybarCommand: settings.sketchybarCommand
         )
     }
 
@@ -320,7 +370,12 @@ class SettingsManager {
             virtualSpaces: settings.virtualSpaces,
             virtualSpacesEnabled: settings.virtualSpacesEnabled,
             virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
-            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers,
+            virtualSpaceClearModifiers: settings.virtualSpaceClearModifiers,
+            overlayVirtualSpaceSaveModifiers: settings.overlayVirtualSpaceSaveModifiers,
+            overlayVirtualSpaceClearModifiers: settings.overlayVirtualSpaceClearModifiers,
+            sketchybarIntegrationEnabled: settings.sketchybarIntegrationEnabled,
+            sketchybarCommand: settings.sketchybarCommand
         )
     }
 
@@ -344,7 +399,12 @@ class SettingsManager {
             virtualSpaces: settings.virtualSpaces,
             virtualSpacesEnabled: settings.virtualSpacesEnabled,
             virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
-            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers,
+            virtualSpaceClearModifiers: settings.virtualSpaceClearModifiers,
+            overlayVirtualSpaceSaveModifiers: settings.overlayVirtualSpaceSaveModifiers,
+            overlayVirtualSpaceClearModifiers: settings.overlayVirtualSpaceClearModifiers,
+            sketchybarIntegrationEnabled: settings.sketchybarIntegrationEnabled,
+            sketchybarCommand: settings.sketchybarCommand
         )
     }
 
@@ -368,7 +428,12 @@ class SettingsManager {
             virtualSpaces: settings.virtualSpaces,
             virtualSpacesEnabled: settings.virtualSpacesEnabled,
             virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
-            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers,
+            virtualSpaceClearModifiers: settings.virtualSpaceClearModifiers,
+            overlayVirtualSpaceSaveModifiers: settings.overlayVirtualSpaceSaveModifiers,
+            overlayVirtualSpaceClearModifiers: settings.overlayVirtualSpaceClearModifiers,
+            sketchybarIntegrationEnabled: settings.sketchybarIntegrationEnabled,
+            sketchybarCommand: settings.sketchybarCommand
         )
     }
 
@@ -392,7 +457,12 @@ class SettingsManager {
             virtualSpaces: settings.virtualSpaces,
             virtualSpacesEnabled: settings.virtualSpacesEnabled,
             virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
-            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers,
+            virtualSpaceClearModifiers: settings.virtualSpaceClearModifiers,
+            overlayVirtualSpaceSaveModifiers: settings.overlayVirtualSpaceSaveModifiers,
+            overlayVirtualSpaceClearModifiers: settings.overlayVirtualSpaceClearModifiers,
+            sketchybarIntegrationEnabled: settings.sketchybarIntegrationEnabled,
+            sketchybarCommand: settings.sketchybarCommand
         )
     }
 
@@ -416,7 +486,12 @@ class SettingsManager {
             virtualSpaces: settings.virtualSpaces,
             virtualSpacesEnabled: settings.virtualSpacesEnabled,
             virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
-            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers,
+            virtualSpaceClearModifiers: settings.virtualSpaceClearModifiers,
+            overlayVirtualSpaceSaveModifiers: settings.overlayVirtualSpaceSaveModifiers,
+            overlayVirtualSpaceClearModifiers: settings.overlayVirtualSpaceClearModifiers,
+            sketchybarIntegrationEnabled: settings.sketchybarIntegrationEnabled,
+            sketchybarCommand: settings.sketchybarCommand
         )
     }
 
@@ -440,7 +515,12 @@ class SettingsManager {
             virtualSpaces: spaces,
             virtualSpacesEnabled: settings.virtualSpacesEnabled,
             virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
-            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers,
+            virtualSpaceClearModifiers: settings.virtualSpaceClearModifiers,
+            overlayVirtualSpaceSaveModifiers: settings.overlayVirtualSpaceSaveModifiers,
+            overlayVirtualSpaceClearModifiers: settings.overlayVirtualSpaceClearModifiers,
+            sketchybarIntegrationEnabled: settings.sketchybarIntegrationEnabled,
+            sketchybarCommand: settings.sketchybarCommand
         )
     }
 
@@ -464,11 +544,16 @@ class SettingsManager {
             virtualSpaces: settings.virtualSpaces,
             virtualSpacesEnabled: enabled,
             virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
-            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers,
+            virtualSpaceClearModifiers: settings.virtualSpaceClearModifiers,
+            overlayVirtualSpaceSaveModifiers: settings.overlayVirtualSpaceSaveModifiers,
+            overlayVirtualSpaceClearModifiers: settings.overlayVirtualSpaceClearModifiers,
+            sketchybarIntegrationEnabled: settings.sketchybarIntegrationEnabled,
+            sketchybarCommand: settings.sketchybarCommand
         )
     }
 
-    func updateVirtualSpaceModifiers(save: UInt, restore: UInt) {
+    func updateVirtualSpaceModifiers(save: UInt, restore: UInt, clear: UInt) {
         settings = MacTileSettings(
             gridSizes: settings.gridSizes,
             windowSpacing: settings.windowSpacing,
@@ -488,7 +573,70 @@ class SettingsManager {
             virtualSpaces: settings.virtualSpaces,
             virtualSpacesEnabled: settings.virtualSpacesEnabled,
             virtualSpaceSaveModifiers: save,
-            virtualSpaceRestoreModifiers: restore
+            virtualSpaceRestoreModifiers: restore,
+            virtualSpaceClearModifiers: clear,
+            overlayVirtualSpaceSaveModifiers: settings.overlayVirtualSpaceSaveModifiers,
+            overlayVirtualSpaceClearModifiers: settings.overlayVirtualSpaceClearModifiers,
+            sketchybarIntegrationEnabled: settings.sketchybarIntegrationEnabled,
+            sketchybarCommand: settings.sketchybarCommand
+        )
+    }
+
+    func updateSketchybarIntegration(_ enabled: Bool) {
+        settings = MacTileSettings(
+            gridSizes: settings.gridSizes,
+            windowSpacing: settings.windowSpacing,
+            insets: settings.insets,
+            autoClose: settings.autoClose,
+            showMenuBarIcon: settings.showMenuBarIcon,
+            launchAtLogin: settings.launchAtLogin,
+            confirmOnClickWithoutDrag: settings.confirmOnClickWithoutDrag,
+            showHelpText: settings.showHelpText,
+            showMonitorIndicator: settings.showMonitorIndicator,
+            toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
+            overlayKeyboard: settings.overlayKeyboard,
+            tilingPresets: settings.tilingPresets,
+            focusPresets: settings.focusPresets,
+            appearance: settings.appearance,
+            virtualSpaces: settings.virtualSpaces,
+            virtualSpacesEnabled: settings.virtualSpacesEnabled,
+            virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers,
+            virtualSpaceClearModifiers: settings.virtualSpaceClearModifiers,
+            overlayVirtualSpaceSaveModifiers: settings.overlayVirtualSpaceSaveModifiers,
+            overlayVirtualSpaceClearModifiers: settings.overlayVirtualSpaceClearModifiers,
+            sketchybarIntegrationEnabled: enabled,
+            sketchybarCommand: settings.sketchybarCommand
+        )
+    }
+
+    func updateOverlayVirtualSpaceModifiers(save: UInt, clear: UInt) {
+        settings = MacTileSettings(
+            gridSizes: settings.gridSizes,
+            windowSpacing: settings.windowSpacing,
+            insets: settings.insets,
+            autoClose: settings.autoClose,
+            showMenuBarIcon: settings.showMenuBarIcon,
+            launchAtLogin: settings.launchAtLogin,
+            confirmOnClickWithoutDrag: settings.confirmOnClickWithoutDrag,
+            showHelpText: settings.showHelpText,
+            showMonitorIndicator: settings.showMonitorIndicator,
+            toggleOverlayShortcut: settings.toggleOverlayShortcut,
+            secondaryToggleOverlayShortcut: settings.secondaryToggleOverlayShortcut,
+            overlayKeyboard: settings.overlayKeyboard,
+            tilingPresets: settings.tilingPresets,
+            focusPresets: settings.focusPresets,
+            appearance: settings.appearance,
+            virtualSpaces: settings.virtualSpaces,
+            virtualSpacesEnabled: settings.virtualSpacesEnabled,
+            virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers,
+            virtualSpaceClearModifiers: settings.virtualSpaceClearModifiers,
+            overlayVirtualSpaceSaveModifiers: save,
+            overlayVirtualSpaceClearModifiers: clear,
+            sketchybarIntegrationEnabled: settings.sketchybarIntegrationEnabled,
+            sketchybarCommand: settings.sketchybarCommand
         )
     }
 
@@ -515,7 +663,12 @@ class SettingsManager {
             virtualSpaces: spaces,
             virtualSpacesEnabled: settings.virtualSpacesEnabled,
             virtualSpaceSaveModifiers: settings.virtualSpaceSaveModifiers,
-            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers
+            virtualSpaceRestoreModifiers: settings.virtualSpaceRestoreModifiers,
+            virtualSpaceClearModifiers: settings.virtualSpaceClearModifiers,
+            overlayVirtualSpaceSaveModifiers: settings.overlayVirtualSpaceSaveModifiers,
+            overlayVirtualSpaceClearModifiers: settings.overlayVirtualSpaceClearModifiers,
+            sketchybarIntegrationEnabled: settings.sketchybarIntegrationEnabled,
+            sketchybarCommand: settings.sketchybarCommand
         )
 
         // Save directly to UserDefaults without triggering the didSet notification

@@ -58,6 +58,192 @@ class VirtualSpaceManager {
         removeActivationObserver()
     }
 
+    // MARK: - Sketchybar Integration
+
+    /// Action types for sketchybar notifications
+    enum SketchybarAction: String {
+        case save
+        case restore
+        case activate
+        case deactivate
+        case clear
+    }
+
+    /// Find sketchybar executable in common locations
+    private static let sketchybarPath: String? = {
+        let paths = [
+            "/opt/homebrew/bin/sketchybar",  // Homebrew on Apple Silicon
+            "/usr/local/bin/sketchybar",      // Homebrew on Intel
+            "/run/current-system/sw/bin/sketchybar"  // NixOS
+        ]
+        for path in paths {
+            if FileManager.default.isExecutableFile(atPath: path) {
+                return path
+            }
+        }
+        // Try to find via PATH using `which`
+        let whichProcess = Process()
+        whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        whichProcess.arguments = ["sketchybar"]
+        let pipe = Pipe()
+        whichProcess.standardOutput = pipe
+        whichProcess.standardError = FileHandle.nullDevice
+        do {
+            try whichProcess.run()
+            whichProcess.waitUntilExit()
+            if whichProcess.terminationStatus == 0 {
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !path.isEmpty {
+                    return path
+                }
+            }
+        } catch {}
+        return nil
+    }()
+
+    /// Notify sketchybar about virtual space changes
+    private func notifySketchybar(action: SketchybarAction, space: VirtualSpace?, monitor displayID: UInt32) {
+        print("[Sketchybar] notifySketchybar called: action=\(action.rawValue) space=\(space?.number ?? -1)")
+        print("[Sketchybar] sketchybarIntegrationEnabled=\(SettingsManager.shared.settings.sketchybarIntegrationEnabled)")
+
+        guard SettingsManager.shared.settings.sketchybarIntegrationEnabled else {
+            print("[Sketchybar] Integration disabled, returning early")
+            return
+        }
+
+        // Check for custom command first
+        if let customCommand = SettingsManager.shared.settings.sketchybarCommand, !customCommand.isEmpty {
+            runCustomSketchybarCommand(customCommand, action: action, space: space, displayID: displayID)
+            return
+        }
+
+        // Use direct sketchybar invocation (safer, no shell injection)
+        guard let sketchybarPath = Self.sketchybarPath else {
+            print("[Sketchybar] sketchybar not found in common paths")
+            return
+        }
+
+        let spaceNumber = space?.number ?? -1
+        let spaceName = space?.name ?? ""
+        let appBundleIDs = space?.uniqueAppBundleIDs ?? []
+        let appNames = resolveAppNames(from: appBundleIDs)
+
+        // Build arguments for sketchybar --trigger
+        // Format: sketchybar --trigger event_name KEY1=value1 KEY2=value2 ...
+        var args = ["--trigger", "mactile_space_change"]
+        args.append("MACTILE_SPACE=\(spaceNumber)")
+        args.append("MACTILE_SPACE_NAME=\(spaceName)")
+        args.append("MACTILE_MONITOR=\(displayID)")
+        args.append("MACTILE_ACTION=\(action.rawValue)")
+        args.append("MACTILE_APPS=\(appBundleIDs.joined(separator: ","))")
+        args.append("MACTILE_APP_NAMES=\(appNames.joined(separator: ","))")
+        args.append("MACTILE_APP_COUNT=\(appBundleIDs.count)")
+
+        // Include app info and names for ALL saved spaces
+        let allSpaces = SettingsManager.shared.settings.virtualSpaces.getNonEmptySpaces(displayID: displayID)
+        for savedSpace in allSpaces {
+            let savedAppBundleIDs = savedSpace.uniqueAppBundleIDs
+            let savedAppNames = resolveAppNames(from: savedAppBundleIDs)
+            args.append("MACTILE_SPACE_\(savedSpace.number)_APPS=\(savedAppNames.joined(separator: ","))")
+            args.append("MACTILE_SPACE_\(savedSpace.number)_NAME=\(savedSpace.name ?? "")")
+        }
+
+        print("[Sketchybar] Running: \(sketchybarPath) \(args.joined(separator: " "))")
+
+        // Run asynchronously to not block UI
+        DispatchQueue.global(qos: .utility).async {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: sketchybarPath)
+            process.arguments = args
+
+            let errorPipe = Pipe()
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = errorPipe
+
+            do {
+                try process.run()
+                process.waitUntilExit()
+                let status = process.terminationStatus
+                print("[Sketchybar] Command finished with status: \(status)")
+                if status != 0 {
+                    let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                    if let errorStr = String(data: errorData, encoding: .utf8), !errorStr.isEmpty {
+                        print("[Sketchybar] Error output: \(errorStr)")
+                    }
+                }
+            } catch {
+                print("[Sketchybar] Failed to run command: \(error)")
+            }
+        }
+    }
+
+    /// Run a custom sketchybar command (for advanced users)
+    /// Uses environment variables to pass data safely
+    private func runCustomSketchybarCommand(_ command: String, action: SketchybarAction, space: VirtualSpace?, displayID: UInt32) {
+        let spaceNumber = space?.number ?? -1
+        let spaceName = space?.name ?? ""
+        let appBundleIDs = space?.uniqueAppBundleIDs ?? []
+        let appNames = resolveAppNames(from: appBundleIDs)
+
+        // Build environment variables (safer than interpolating into command)
+        var env = ProcessInfo.processInfo.environment
+        env["MACTILE_SPACE"] = String(spaceNumber)
+        env["MACTILE_SPACE_NAME"] = spaceName
+        env["MACTILE_MONITOR"] = String(displayID)
+        env["MACTILE_ACTION"] = action.rawValue
+        env["MACTILE_APPS"] = appBundleIDs.joined(separator: ",")
+        env["MACTILE_APP_NAMES"] = appNames.joined(separator: ",")
+        env["MACTILE_APP_COUNT"] = String(appBundleIDs.count)
+
+        let allSpaces = SettingsManager.shared.settings.virtualSpaces.getNonEmptySpaces(displayID: displayID)
+        for savedSpace in allSpaces {
+            let savedAppBundleIDs = savedSpace.uniqueAppBundleIDs
+            let savedAppNames = resolveAppNames(from: savedAppBundleIDs)
+            env["MACTILE_SPACE_\(savedSpace.number)_APPS"] = savedAppNames.joined(separator: ",")
+            env["MACTILE_SPACE_\(savedSpace.number)_NAME"] = savedSpace.name ?? ""
+        }
+
+        print("[Sketchybar] Running custom command with env vars")
+
+        DispatchQueue.global(qos: .utility).async {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/bash")
+            process.arguments = ["-c", command]
+            process.environment = env
+
+            let errorPipe = Pipe()
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = errorPipe
+
+            do {
+                try process.run()
+                process.waitUntilExit()
+                let status = process.terminationStatus
+                if status != 0 {
+                    let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                    if let errorStr = String(data: errorData, encoding: .utf8), !errorStr.isEmpty {
+                        print("[Sketchybar] Custom command error: \(errorStr)")
+                    }
+                }
+            } catch {
+                print("[Sketchybar] Failed to run custom command: \(error)")
+            }
+        }
+    }
+
+    /// Resolve app names from bundle IDs
+    private func resolveAppNames(from bundleIDs: [String]) -> [String] {
+        return bundleIDs.compactMap { bundleID in
+            if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+                return FileManager.default.displayName(atPath: appURL.path)
+                    .replacingOccurrences(of: ".app", with: "")
+            }
+            // Fallback: extract last component of bundle ID
+            return bundleID.split(separator: ".").last.map(String.init)
+        }
+    }
+
     // MARK: - Coordinate System Helpers
 
     /// Get the height of the primary screen (the screen with the menu bar).
@@ -103,6 +289,9 @@ class VirtualSpaceManager {
         // Mark this space as active
         activateSpace(space, forMonitor: displayID)
 
+        // Notify sketchybar
+        notifySketchybar(action: .save, space: space, monitor: displayID)
+
         print("[VirtualSpaces] Space \(number) saved with \(windows.count) windows")
     }
 
@@ -126,7 +315,45 @@ class VirtualSpaceManager {
         // Mark this space as active
         activateSpace(space, forMonitor: displayID)
 
+        // Notify sketchybar
+        notifySketchybar(action: .restore, space: space, monitor: displayID)
+
         print("[VirtualSpaces] Space \(number) restored")
+    }
+
+    /// Clear (unset) a virtual space
+    func clearSpace(number: Int, forMonitor displayID: UInt32) {
+        print("[VirtualSpaces] Clearing space \(number) for monitor \(displayID)")
+
+        // Check if this space was active
+        let wasActive = activeSpaces[displayID] == number
+
+        // Capture the space before clearing (for sketchybar notification)
+        let clearedSpace = SettingsManager.shared.settings.virtualSpaces.getSpace(displayID: displayID, number: number)
+
+        // Clear from storage
+        var storage = SettingsManager.shared.settings.virtualSpaces
+        storage.clearSpace(displayID: displayID, number: number)
+        SettingsManager.shared.saveVirtualSpacesQuietly(storage)
+
+        // If it was active, deactivate it
+        if wasActive {
+            activeSpaces.removeValue(forKey: displayID)
+            activeSpaceWindows.removeValue(forKey: displayID)
+            lastKnownFrames.removeValue(forKey: displayID)
+
+            // Stop monitoring if no active spaces left
+            if activeSpaces.isEmpty {
+                stopMonitoring()
+            }
+
+            delegate?.virtualSpaceDidBecomeInactive(forMonitor: displayID)
+        }
+
+        // Notify sketchybar with the cleared space info (so it knows which space was cleared)
+        notifySketchybar(action: .clear, space: clearedSpace, monitor: displayID)
+
+        print("[VirtualSpaces] Space \(number) cleared")
     }
 
     /// Rename the active virtual space for a monitor
@@ -157,6 +384,16 @@ class VirtualSpaceManager {
             delegate?.virtualSpaceDidBecomeActive(space, forMonitor: displayID)
         }
 
+        // Notify sketchybar about the rename so it can update the space name display
+        // Use the active space if this is the active one, otherwise just trigger a refresh
+        if activeSpaces[displayID] == number {
+            notifySketchybar(action: .activate, space: space, monitor: displayID)
+        } else {
+            // Still notify so the space list is updated
+            let activeSpace = getActiveSpace(forMonitor: displayID)
+            notifySketchybar(action: .activate, space: activeSpace, monitor: displayID)
+        }
+
         print("[VirtualSpaces] Renamed space \(number) to '\(name)'")
     }
 
@@ -181,6 +418,9 @@ class VirtualSpaceManager {
         if activeSpaces.isEmpty {
             stopMonitoring()
         }
+
+        // Notify sketchybar
+        notifySketchybar(action: .deactivate, space: nil, monitor: displayID)
 
         delegate?.virtualSpaceDidBecomeInactive(forMonitor: displayID)
     }
@@ -695,7 +935,8 @@ class VirtualSpaceManager {
     // MARK: - Active State Management
 
     /// Mark a space as active and start monitoring
-    private func activateSpace(_ space: VirtualSpace, forMonitor displayID: UInt32) {
+    /// - Parameter notifyBar: Whether to notify sketchybar (default false since callers notify separately)
+    private func activateSpace(_ space: VirtualSpace, forMonitor displayID: UInt32, notifyBar: Bool = false) {
         activeSpaces[displayID] = space.number
 
         // Track windows in this space
@@ -720,6 +961,11 @@ class VirtualSpaceManager {
 
         // Start monitoring for deactivation
         startMonitoring()
+
+        // Notify sketchybar if requested (for auto-activation via layout matching)
+        if notifyBar {
+            notifySketchybar(action: .activate, space: space, monitor: displayID)
+        }
 
         // Notify delegate
         delegate?.virtualSpaceDidBecomeActive(space, forMonitor: displayID)
@@ -907,7 +1153,8 @@ class VirtualSpaceManager {
         for space in spaces {
             if layoutMatches(space: space, currentWindows: currentWindows) {
                 if activeSpaces[displayID] != space.number {
-                    activateSpace(space, forMonitor: displayID)
+                    // Auto-activation: notify sketchybar
+                    activateSpace(space, forMonitor: displayID, notifyBar: true)
                 }
                 return nil
             }

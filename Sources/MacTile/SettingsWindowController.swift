@@ -58,16 +58,34 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     // Virtual Spaces tab
     private var virtualSpacesEnabledCheckbox: NSButton!
+    private var sketchybarIntegrationCheckbox: NSButton!
     private var saveModifiersField: NSTextField!
     private var saveModifiersRecordButton: NSButton!
     private var restoreModifiersField: NSTextField!
     private var restoreModifiersRecordButton: NSButton!
+    private var clearModifiersField: NSTextField!
+    private var clearModifiersRecordButton: NSButton!
     private var isRecordingSaveModifiers = false
     private var isRecordingRestoreModifiers = false
+    private var isRecordingClearModifiers = false
     private var saveModifiersMonitor: Any?
     private var restoreModifiersMonitor: Any?
+    private var clearModifiersMonitor: Any?
     private var recordedSaveModifiers: UInt = 0
     private var recordedRestoreModifiers: UInt = 0
+    private var recordedClearModifiers: UInt = 0
+
+    // Overlay Virtual Space modifiers
+    private var overlaySaveModifiersField: NSTextField!
+    private var overlaySaveModifiersRecordButton: NSButton!
+    private var overlayClearModifiersField: NSTextField!
+    private var overlayClearModifiersRecordButton: NSButton!
+    private var isRecordingOverlaySaveModifiers = false
+    private var isRecordingOverlayClearModifiers = false
+    private var overlaySaveModifiersMonitor: Any?
+    private var overlayClearModifiersMonitor: Any?
+    private var recordedOverlaySaveModifiers: UInt = 0
+    private var recordedOverlayClearModifiers: UInt = 0
 
     // Appearance tab
     private var overlayOpacitySlider: NSSlider!
@@ -1053,6 +1071,17 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         virtualSpacesEnabledCheckbox = NSButton(checkboxWithTitle: "Enable Virtual Spaces", target: nil, action: nil)
         virtualSpacesEnabledCheckbox.frame = NSRect(x: 20, y: y, width: 250, height: 20)
         view.addSubview(virtualSpacesEnabledCheckbox)
+        y -= 24
+
+        // Sketchybar integration checkbox
+        sketchybarIntegrationCheckbox = NSButton(checkboxWithTitle: "Enable Sketchybar Integration", target: nil, action: nil)
+        sketchybarIntegrationCheckbox.frame = NSRect(x: 20, y: y, width: 250, height: 20)
+        view.addSubview(sketchybarIntegrationCheckbox)
+
+        let sketchybarHint = createLabel("Show virtual space indicators in sketchybar", frame: NSRect(x: 270, y: y, width: 300, height: 20))
+        sketchybarHint.font = NSFont.systemFont(ofSize: 11)
+        sketchybarHint.textColor = .secondaryLabelColor
+        view.addSubview(sketchybarHint)
         y -= 32
 
         // Save Modifiers Section
@@ -1103,12 +1132,98 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         restoreShortcutHint.font = NSFont.systemFont(ofSize: 11)
         restoreShortcutHint.textColor = .secondaryLabelColor
         view.addSubview(restoreShortcutHint)
+        y -= 28
+
+        // Clear Modifiers Section
+        let clearModifiersLabel = createLabel("Clear Modifiers:", frame: NSRect(x: 20, y: y, width: 120, height: 20))
+        clearModifiersLabel.font = NSFont.boldSystemFont(ofSize: 13)
+        view.addSubview(clearModifiersLabel)
+
+        clearModifiersField = NSTextField(frame: NSRect(x: 140, y: y - 2, width: 100, height: 24))
+        clearModifiersField.isEditable = false
+        clearModifiersField.isSelectable = false
+        clearModifiersField.alignment = .center
+        clearModifiersField.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .medium)
+        view.addSubview(clearModifiersField)
+
+        clearModifiersRecordButton = NSButton(frame: NSRect(x: 250, y: y - 2, width: 80, height: 24))
+        clearModifiersRecordButton.title = "Record"
+        clearModifiersRecordButton.bezelStyle = .rounded
+        clearModifiersRecordButton.target = self
+        clearModifiersRecordButton.action = #selector(toggleRecordClearModifiers)
+        view.addSubview(clearModifiersRecordButton)
+
+        let clearShortcutHint = createLabel("+ 0-9 to clear/unset", frame: NSRect(x: 340, y: y, width: 140, height: 20))
+        clearShortcutHint.font = NSFont.systemFont(ofSize: 11)
+        clearShortcutHint.textColor = .secondaryLabelColor
+        view.addSubview(clearShortcutHint)
         y -= 20
 
         let recordHint = createLabel("Press modifier keys + Space to record new modifiers", frame: NSRect(x: 20, y: y, width: 400, height: 16))
         recordHint.font = NSFont.systemFont(ofSize: 11)
         recordHint.textColor = .tertiaryLabelColor
         view.addSubview(recordHint)
+        y -= 28
+
+        // Overlay Modifiers Section (when overlay is active)
+        let overlayModifiersHeader = createLabel("Overlay Mode Modifiers:", frame: NSRect(x: 20, y: y, width: 200, height: 20))
+        overlayModifiersHeader.font = NSFont.boldSystemFont(ofSize: 13)
+        view.addSubview(overlayModifiersHeader)
+
+        let overlayModifiersHint = createLabel("(while overlay is visible)", frame: NSRect(x: 220, y: y, width: 200, height: 20))
+        overlayModifiersHint.font = NSFont.systemFont(ofSize: 11)
+        overlayModifiersHint.textColor = .secondaryLabelColor
+        view.addSubview(overlayModifiersHint)
+        y -= 28
+
+        // Overlay Save Modifiers
+        let overlaySaveLabel = createLabel("Save:", frame: NSRect(x: 40, y: y, width: 80, height: 20))
+        overlaySaveLabel.font = NSFont.systemFont(ofSize: 13)
+        view.addSubview(overlaySaveLabel)
+
+        overlaySaveModifiersField = NSTextField(frame: NSRect(x: 120, y: y - 2, width: 100, height: 24))
+        overlaySaveModifiersField.isEditable = false
+        overlaySaveModifiersField.isSelectable = false
+        overlaySaveModifiersField.alignment = .center
+        overlaySaveModifiersField.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .medium)
+        view.addSubview(overlaySaveModifiersField)
+
+        overlaySaveModifiersRecordButton = NSButton(frame: NSRect(x: 230, y: y - 2, width: 80, height: 24))
+        overlaySaveModifiersRecordButton.title = "Record"
+        overlaySaveModifiersRecordButton.bezelStyle = .rounded
+        overlaySaveModifiersRecordButton.target = self
+        overlaySaveModifiersRecordButton.action = #selector(toggleRecordOverlaySaveModifiers)
+        view.addSubview(overlaySaveModifiersRecordButton)
+
+        let overlaySaveHint = createLabel("+ 0-9 in overlay", frame: NSRect(x: 320, y: y, width: 120, height: 20))
+        overlaySaveHint.font = NSFont.systemFont(ofSize: 11)
+        overlaySaveHint.textColor = .secondaryLabelColor
+        view.addSubview(overlaySaveHint)
+        y -= 28
+
+        // Overlay Clear Modifiers
+        let overlayClearLabel = createLabel("Clear:", frame: NSRect(x: 40, y: y, width: 80, height: 20))
+        overlayClearLabel.font = NSFont.systemFont(ofSize: 13)
+        view.addSubview(overlayClearLabel)
+
+        overlayClearModifiersField = NSTextField(frame: NSRect(x: 120, y: y - 2, width: 100, height: 24))
+        overlayClearModifiersField.isEditable = false
+        overlayClearModifiersField.isSelectable = false
+        overlayClearModifiersField.alignment = .center
+        overlayClearModifiersField.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .medium)
+        view.addSubview(overlayClearModifiersField)
+
+        overlayClearModifiersRecordButton = NSButton(frame: NSRect(x: 230, y: y - 2, width: 80, height: 24))
+        overlayClearModifiersRecordButton.title = "Record"
+        overlayClearModifiersRecordButton.bezelStyle = .rounded
+        overlayClearModifiersRecordButton.target = self
+        overlayClearModifiersRecordButton.action = #selector(toggleRecordOverlayClearModifiers)
+        view.addSubview(overlayClearModifiersRecordButton)
+
+        let overlayClearHint = createLabel("+ 0-9 in overlay", frame: NSRect(x: 320, y: y, width: 120, height: 20))
+        overlayClearHint.font = NSFont.systemFont(ofSize: 11)
+        overlayClearHint.textColor = .secondaryLabelColor
+        view.addSubview(overlayClearHint)
         y -= 28
 
         // Additional shortcuts info
@@ -1131,6 +1246,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         let usageTexts = [
             "• Arrange windows, then press Save modifiers + number (0-9) to save",
             "• Press Restore modifiers + number to restore saved positions",
+            "• Press Clear modifiers + number to unset/clear a saved space",
             "• Each monitor has its own 10 spaces; only ≥40% visible windows are saved"
         ]
 
@@ -1158,10 +1274,19 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         let defaults = MacTileSettings.default
 
         virtualSpacesEnabledCheckbox.state = defaults.virtualSpacesEnabled ? .on : .off
+        sketchybarIntegrationCheckbox.state = defaults.sketchybarIntegrationEnabled ? .on : .off
         recordedSaveModifiers = defaults.virtualSpaceSaveModifiers
         recordedRestoreModifiers = defaults.virtualSpaceRestoreModifiers
+        recordedClearModifiers = defaults.virtualSpaceClearModifiers
         saveModifiersField.stringValue = OverlayKeyboardSettings.modifierDisplayString(defaults.virtualSpaceSaveModifiers)
         restoreModifiersField.stringValue = OverlayKeyboardSettings.modifierDisplayString(defaults.virtualSpaceRestoreModifiers)
+        clearModifiersField.stringValue = OverlayKeyboardSettings.modifierDisplayString(defaults.virtualSpaceClearModifiers)
+
+        // Overlay modifiers
+        recordedOverlaySaveModifiers = defaults.overlayVirtualSpaceSaveModifiers
+        recordedOverlayClearModifiers = defaults.overlayVirtualSpaceClearModifiers
+        overlaySaveModifiersField.stringValue = OverlayKeyboardSettings.modifierDisplayString(defaults.overlayVirtualSpaceSaveModifiers)
+        overlayClearModifiersField.stringValue = OverlayKeyboardSettings.modifierDisplayString(defaults.overlayVirtualSpaceClearModifiers)
     }
 
     @objc private func toggleRecordSaveModifiers() {
@@ -1314,14 +1439,246 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
+    @objc private func toggleRecordClearModifiers() {
+        isRecordingClearModifiers.toggle()
+
+        if isRecordingClearModifiers {
+            clearModifiersRecordButton.title = "Press Keys..."
+            clearModifiersField.stringValue = "..."
+            window?.makeFirstResponder(window?.contentView)
+
+            // Remove any existing monitor first
+            if let monitor = clearModifiersMonitor {
+                NSEvent.removeMonitor(monitor)
+                clearModifiersMonitor = nil
+            }
+
+            // Set up local event monitor to capture modifier keys + space
+            clearModifiersMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self = self, self.isRecordingClearModifiers else { return event }
+
+                // Handle Escape to cancel
+                if event.keyCode == 53 {
+                    self.isRecordingClearModifiers = false
+                    self.clearModifiersRecordButton.title = "Record"
+                    if let monitor = self.clearModifiersMonitor {
+                        NSEvent.removeMonitor(monitor)
+                        self.clearModifiersMonitor = nil
+                    }
+                    self.loadVirtualSpacesSettings()
+                    return nil
+                }
+
+                // Only accept Space to confirm (keyCode 49)
+                if event.keyCode == 49 {
+                    // Get modifiers
+                    var modifiers: UInt = 0
+                    if event.modifierFlags.contains(.control) {
+                        modifiers |= KeyboardShortcut.Modifiers.control
+                    }
+                    if event.modifierFlags.contains(.option) {
+                        modifiers |= KeyboardShortcut.Modifiers.option
+                    }
+                    if event.modifierFlags.contains(.shift) {
+                        modifiers |= KeyboardShortcut.Modifiers.shift
+                    }
+                    if event.modifierFlags.contains(.command) {
+                        modifiers |= KeyboardShortcut.Modifiers.command
+                    }
+
+                    // Need at least one modifier
+                    if modifiers == 0 {
+                        return nil
+                    }
+
+                    self.recordedClearModifiers = modifiers
+                    self.clearModifiersField.stringValue = OverlayKeyboardSettings.modifierDisplayString(modifiers)
+                    self.isRecordingClearModifiers = false
+                    self.clearModifiersRecordButton.title = "Record"
+
+                    if let monitor = self.clearModifiersMonitor {
+                        NSEvent.removeMonitor(monitor)
+                        self.clearModifiersMonitor = nil
+                    }
+                    return nil
+                }
+
+                return nil  // Consume other keys while recording
+            }
+        } else {
+            clearModifiersRecordButton.title = "Record"
+            if let monitor = clearModifiersMonitor {
+                NSEvent.removeMonitor(monitor)
+                clearModifiersMonitor = nil
+            }
+        }
+    }
+
+    @objc private func toggleRecordOverlaySaveModifiers() {
+        isRecordingOverlaySaveModifiers.toggle()
+
+        if isRecordingOverlaySaveModifiers {
+            overlaySaveModifiersRecordButton.title = "Press Keys..."
+            overlaySaveModifiersField.stringValue = "..."
+            window?.makeFirstResponder(window?.contentView)
+
+            if let monitor = overlaySaveModifiersMonitor {
+                NSEvent.removeMonitor(monitor)
+                overlaySaveModifiersMonitor = nil
+            }
+
+            overlaySaveModifiersMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self = self, self.isRecordingOverlaySaveModifiers else { return event }
+
+                if event.keyCode == 53 {
+                    self.isRecordingOverlaySaveModifiers = false
+                    self.overlaySaveModifiersRecordButton.title = "Record"
+                    if let monitor = self.overlaySaveModifiersMonitor {
+                        NSEvent.removeMonitor(monitor)
+                        self.overlaySaveModifiersMonitor = nil
+                    }
+                    self.loadVirtualSpacesSettings()
+                    return nil
+                }
+
+                if event.keyCode == 49 {
+                    var modifiers: UInt = 0
+                    if event.modifierFlags.contains(.control) {
+                        modifiers |= KeyboardShortcut.Modifiers.control
+                    }
+                    if event.modifierFlags.contains(.option) {
+                        modifiers |= KeyboardShortcut.Modifiers.option
+                    }
+                    if event.modifierFlags.contains(.shift) {
+                        modifiers |= KeyboardShortcut.Modifiers.shift
+                    }
+                    if event.modifierFlags.contains(.command) {
+                        modifiers |= KeyboardShortcut.Modifiers.command
+                    }
+
+                    // Allow no modifiers for overlay (just number keys)
+                    self.recordedOverlaySaveModifiers = modifiers
+                    self.overlaySaveModifiersField.stringValue = modifiers == 0 ? "None" : OverlayKeyboardSettings.modifierDisplayString(modifiers)
+                    self.isRecordingOverlaySaveModifiers = false
+                    self.overlaySaveModifiersRecordButton.title = "Record"
+
+                    if let monitor = self.overlaySaveModifiersMonitor {
+                        NSEvent.removeMonitor(monitor)
+                        self.overlaySaveModifiersMonitor = nil
+                    }
+
+                    // Save immediately
+                    SettingsManager.shared.updateOverlayVirtualSpaceModifiers(
+                        save: self.recordedOverlaySaveModifiers,
+                        clear: self.recordedOverlayClearModifiers
+                    )
+                    return nil
+                }
+
+                return nil
+            }
+        } else {
+            overlaySaveModifiersRecordButton.title = "Record"
+            if let monitor = overlaySaveModifiersMonitor {
+                NSEvent.removeMonitor(monitor)
+                overlaySaveModifiersMonitor = nil
+            }
+        }
+    }
+
+    @objc private func toggleRecordOverlayClearModifiers() {
+        isRecordingOverlayClearModifiers.toggle()
+
+        if isRecordingOverlayClearModifiers {
+            overlayClearModifiersRecordButton.title = "Press Keys..."
+            overlayClearModifiersField.stringValue = "..."
+            window?.makeFirstResponder(window?.contentView)
+
+            if let monitor = overlayClearModifiersMonitor {
+                NSEvent.removeMonitor(monitor)
+                overlayClearModifiersMonitor = nil
+            }
+
+            overlayClearModifiersMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self = self, self.isRecordingOverlayClearModifiers else { return event }
+
+                if event.keyCode == 53 {
+                    self.isRecordingOverlayClearModifiers = false
+                    self.overlayClearModifiersRecordButton.title = "Record"
+                    if let monitor = self.overlayClearModifiersMonitor {
+                        NSEvent.removeMonitor(monitor)
+                        self.overlayClearModifiersMonitor = nil
+                    }
+                    self.loadVirtualSpacesSettings()
+                    return nil
+                }
+
+                if event.keyCode == 49 {
+                    var modifiers: UInt = 0
+                    if event.modifierFlags.contains(.control) {
+                        modifiers |= KeyboardShortcut.Modifiers.control
+                    }
+                    if event.modifierFlags.contains(.option) {
+                        modifiers |= KeyboardShortcut.Modifiers.option
+                    }
+                    if event.modifierFlags.contains(.shift) {
+                        modifiers |= KeyboardShortcut.Modifiers.shift
+                    }
+                    if event.modifierFlags.contains(.command) {
+                        modifiers |= KeyboardShortcut.Modifiers.command
+                    }
+
+                    // Need at least one modifier for clear (to avoid accidental clears)
+                    if modifiers == 0 {
+                        return nil
+                    }
+
+                    self.recordedOverlayClearModifiers = modifiers
+                    self.overlayClearModifiersField.stringValue = OverlayKeyboardSettings.modifierDisplayString(modifiers)
+                    self.isRecordingOverlayClearModifiers = false
+                    self.overlayClearModifiersRecordButton.title = "Record"
+
+                    if let monitor = self.overlayClearModifiersMonitor {
+                        NSEvent.removeMonitor(monitor)
+                        self.overlayClearModifiersMonitor = nil
+                    }
+
+                    // Save immediately
+                    SettingsManager.shared.updateOverlayVirtualSpaceModifiers(
+                        save: self.recordedOverlaySaveModifiers,
+                        clear: self.recordedOverlayClearModifiers
+                    )
+                    return nil
+                }
+
+                return nil
+            }
+        } else {
+            overlayClearModifiersRecordButton.title = "Record"
+            if let monitor = overlayClearModifiersMonitor {
+                NSEvent.removeMonitor(monitor)
+                overlayClearModifiersMonitor = nil
+            }
+        }
+    }
+
     private func loadVirtualSpacesSettings() {
         let settings = SettingsManager.shared.settings
 
         virtualSpacesEnabledCheckbox.state = settings.virtualSpacesEnabled ? .on : .off
+        sketchybarIntegrationCheckbox.state = settings.sketchybarIntegrationEnabled ? .on : .off
         recordedSaveModifiers = settings.virtualSpaceSaveModifiers
         recordedRestoreModifiers = settings.virtualSpaceRestoreModifiers
+        recordedClearModifiers = settings.virtualSpaceClearModifiers
         saveModifiersField.stringValue = OverlayKeyboardSettings.modifierDisplayString(settings.virtualSpaceSaveModifiers)
         restoreModifiersField.stringValue = OverlayKeyboardSettings.modifierDisplayString(settings.virtualSpaceRestoreModifiers)
+        clearModifiersField.stringValue = OverlayKeyboardSettings.modifierDisplayString(settings.virtualSpaceClearModifiers)
+
+        // Overlay modifiers
+        recordedOverlaySaveModifiers = settings.overlayVirtualSpaceSaveModifiers
+        recordedOverlayClearModifiers = settings.overlayVirtualSpaceClearModifiers
+        overlaySaveModifiersField.stringValue = settings.overlayVirtualSpaceSaveModifiers == 0 ? "None" : OverlayKeyboardSettings.modifierDisplayString(settings.overlayVirtualSpaceSaveModifiers)
+        overlayClearModifiersField.stringValue = OverlayKeyboardSettings.modifierDisplayString(settings.overlayVirtualSpaceClearModifiers)
     }
 
     private func createAboutTab() -> NSTabViewItem {
@@ -1954,9 +2311,11 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
         // Update virtual spaces settings
         SettingsManager.shared.updateVirtualSpacesEnabled(virtualSpacesEnabledCheckbox.state == .on)
+        SettingsManager.shared.updateSketchybarIntegration(sketchybarIntegrationCheckbox.state == .on)
         SettingsManager.shared.updateVirtualSpaceModifiers(
             save: recordedSaveModifiers,
-            restore: recordedRestoreModifiers
+            restore: recordedRestoreModifiers,
+            clear: recordedClearModifiers
         )
 
         window?.close()

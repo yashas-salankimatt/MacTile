@@ -153,6 +153,8 @@ class OverlayWindowController: NSWindowController {
         gridView.confirmOnClickWithoutDrag = settings.confirmOnClickWithoutDrag
         gridView.tilingPresets = settings.tilingPresets
         gridView.focusPresets = settings.focusPresets
+        gridView.overlayVirtualSpaceSaveModifiers = settings.overlayVirtualSpaceSaveModifiers
+        gridView.overlayVirtualSpaceClearModifiers = settings.overlayVirtualSpaceClearModifiers
         gridView.onSelectionConfirmed = { [weak self] selection in
             self?.applySelection(selection)
         }
@@ -191,6 +193,20 @@ class OverlayWindowController: NSWindowController {
             VirtualSpaceManager.shared.saveToSpace(number: spaceNumber, forMonitor: displayID)
             self.hideOverlay(cancelled: false)
             // Restore focus to original window since we're just saving, not tiling
+            if let windowToFocus = windowToFocus {
+                RealWindowManager.shared.activateWindow(windowToFocus)
+            }
+        }
+        gridView.onVirtualSpaceClear = { [weak self] spaceNumber in
+            guard let self = self,
+                  SettingsManager.shared.settings.virtualSpacesEnabled,
+                  let screen = self.currentScreen else { return }
+            let displayID = VirtualSpaceManager.displayID(for: screen)
+            // Capture target window before hiding (hideOverlay sets it to nil)
+            let windowToFocus = self.targetWindow
+            VirtualSpaceManager.shared.clearSpace(number: spaceNumber, forMonitor: displayID)
+            self.hideOverlay(cancelled: false)
+            // Restore focus to original window since we're just clearing, not tiling
             if let windowToFocus = windowToFocus {
                 RealWindowManager.shared.activateWindow(windowToFocus)
             }
@@ -585,6 +601,11 @@ class GridOverlayView: NSView {
     var onFocusPresetActivated: ((String) -> Void)?  // Called with bundle ID when focus preset is used
     var onVirtualSpaceRestore: ((Int) -> Void)?
     var onVirtualSpaceSave: ((Int) -> Void)?
+    var onVirtualSpaceClear: ((Int) -> Void)?
+
+    // Configurable modifiers for overlay virtual space actions
+    var overlayVirtualSpaceSaveModifiers: UInt = KeyboardShortcut.Modifiers.shift
+    var overlayVirtualSpaceClearModifiers: UInt = KeyboardShortcut.Modifiers.option | KeyboardShortcut.Modifiers.shift
 
     private var isSelecting = false
     private var selectionAnchor: GridOffset?
@@ -856,14 +877,21 @@ class GridOverlayView: NSView {
             eventModifiers |= KeyboardShortcut.Modifiers.command
         }
 
-        // Virtual space overlay triggers: number = restore, Shift+number = save
+        // Virtual space overlay triggers: number = restore, configured modifiers+number = save/clear
         if let spaceNumber = keyCodeToSpaceNumber(event.keyCode) {
-            if eventModifiers == KeyboardShortcut.Modifiers.none {
-                onVirtualSpaceRestore?(spaceNumber)
+            // Clear takes priority if modifiers match (check first since clear modifiers often include save modifiers)
+            if eventModifiers == overlayVirtualSpaceClearModifiers {
+                onVirtualSpaceClear?(spaceNumber)
                 return
             }
-            if eventModifiers == KeyboardShortcut.Modifiers.shift {
+            // Save with configured modifiers
+            if eventModifiers == overlayVirtualSpaceSaveModifiers {
                 onVirtualSpaceSave?(spaceNumber)
+                return
+            }
+            // Restore with no modifiers
+            if eventModifiers == KeyboardShortcut.Modifiers.none {
+                onVirtualSpaceRestore?(spaceNumber)
                 return
             }
         }
