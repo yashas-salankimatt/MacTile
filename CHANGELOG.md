@@ -2,6 +2,38 @@
 
 All notable changes to MacTile will be documented in this file.
 
+## [1.1.1] - 2026-02-04
+
+### Added
+
+- **Virtual Space Overlay Triggers**: Save and restore virtual spaces directly from the overlay
+  - Number keys (0-9) restore virtual spaces
+  - Shift+number saves current windows to a virtual space
+  - Auto-closes overlay after save/restore
+
+- **Auto-Activate Matching Layouts**: Virtual spaces automatically activate when window layout matches
+  - Detects when you return to a saved window arrangement
+  - Updates menu bar indicator without manual trigger
+  - Uses window IDs for reliable matching
+
+### Fixed
+
+- **Focus Presets for Always-Running Apps**: Fixed Finder and other system apps not opening new windows
+  - "Open if not running" now correctly opens a new window when app has no windows
+  - Works on first keypress instead of requiring two presses
+
+- **Virtual Space Window Restoration**: Fixed full-screen windows requiring two triggers to restore
+  - Now uses shared window frame logic with proper retry and delay handling
+  - Consistent behavior with overlay tiling
+
+- **Virtual Space Rename**: Fixed rename not persisting in release builds
+  - Rename now works by space number rather than requiring active state
+
+- **Layout Detection Timing**: Fixed layout matching requiring extra alt-tab
+  - Observer now stays active even when no space is active
+  - Added 100ms delay to let window state settle
+  - Guaranteed retry if check is throttled
+
 ## [1.1.0] - 2026-02-03
 
 ### Added

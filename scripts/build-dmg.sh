@@ -8,7 +8,7 @@ set -e
 
 # Configuration
 APP_NAME="MacTile"
-VERSION="1.1.0"
+VERSION="1.1.1"
 DMG_NAME="${APP_NAME}-${VERSION}"
 
 # Paths
@@ -21,11 +21,8 @@ DMG_TEMP_DIR="$BUILD_DIR/dmg-temp"
 
 echo "📦 Building MacTile DMG..."
 
-# Build the app first if it doesn't exist
-if [ ! -d "$APP_PATH" ]; then
-    echo "   App not found, building first..."
-    "$SCRIPT_DIR/build-app.sh"
-fi
+# Always build the app first to ensure it's up to date
+"$SCRIPT_DIR/build-app.sh"
 
 # Clean up any previous DMG build
 rm -rf "$DMG_TEMP_DIR"
