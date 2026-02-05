@@ -176,16 +176,24 @@ class OverlayWindowController: NSWindowController {
                   SettingsManager.shared.settings.virtualSpacesEnabled,
                   let screen = self.currentScreen else { return }
             let displayID = VirtualSpaceManager.displayID(for: screen)
-            VirtualSpaceManager.shared.restoreFromSpace(number: spaceNumber, forMonitor: displayID)
+            // Hide overlay FIRST, then restore - this ensures focus is set AFTER
+            // the overlay is gone, so macOS doesn't override it
             self.hideOverlay(cancelled: false)
+            VirtualSpaceManager.shared.restoreFromSpace(number: spaceNumber, forMonitor: displayID)
         }
         gridView.onVirtualSpaceSave = { [weak self] spaceNumber in
             guard let self = self,
                   SettingsManager.shared.settings.virtualSpacesEnabled,
                   let screen = self.currentScreen else { return }
             let displayID = VirtualSpaceManager.displayID(for: screen)
+            // Capture target window before hiding (hideOverlay sets it to nil)
+            let windowToFocus = self.targetWindow
             VirtualSpaceManager.shared.saveToSpace(number: spaceNumber, forMonitor: displayID)
             self.hideOverlay(cancelled: false)
+            // Restore focus to original window since we're just saving, not tiling
+            if let windowToFocus = windowToFocus {
+                RealWindowManager.shared.activateWindow(windowToFocus)
+            }
         }
         contentView.addSubview(gridView)
         self.gridView = gridView

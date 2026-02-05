@@ -34,6 +34,9 @@ class VirtualSpaceManager {
     private let layoutCheckInterval: TimeInterval = 0.3
     private let layoutCheckDelay: TimeInterval = 0.1
     private var pendingLayoutChecks: [UInt32: DispatchWorkItem] = [:]
+    private var debugLoggingEnabled: Bool {
+        ProcessInfo.processInfo.environment["MACTILE_VS_DEBUG"] == "1"
+    }
 
     private init() {
         ensureActivationObserver()
@@ -66,6 +69,12 @@ class VirtualSpaceManager {
         // Capture topmost windows on this monitor
         let windows = captureTopmostWindows(forMonitor: displayID)
         print("[VirtualSpaces] Captured \(windows.count) windows")
+        if debugLoggingEnabled {
+            for window in windows {
+                let idString = window.windowID.map(String.init) ?? "nil"
+                print("[VirtualSpaces]   Save window: \(window.appBundleID) '\(window.windowTitle)' id=\(idString) frame=\(window.frame)")
+            }
+        }
 
         // Create the virtual space
         let space = VirtualSpace(
@@ -339,7 +348,7 @@ class VirtualSpaceManager {
         var foundWindows: [(spaceWindow: VirtualSpaceWindow, axWindow: AXUIElement, pid: pid_t)] = []
 
         for spaceWindow in space.windows {
-            if let (axWindow, pid) = findWindow(matching: spaceWindow) {
+            if let (axWindow, pid) = findWindow(matching: spaceWindow, log: true) {
                 foundWindows.append((spaceWindow, axWindow, pid))
             } else {
                 print("[VirtualSpaces] Could not find window: \(spaceWindow.appBundleID) - '\(spaceWindow.windowTitle)'")
@@ -415,11 +424,25 @@ class VirtualSpaceManager {
     }
 
     /// Find a window matching the saved window info
-    private func findWindow(matching spaceWindow: VirtualSpaceWindow) -> (AXUIElement, pid_t)? {
+    ///
+    /// Matching strategy (in order of preference):
+    /// 1. Direct AX window number match (try both AXWindowNumber and _AXWindowNumber attributes)
+    /// 2. CG → AX lookup: find windowID in CGWindowList, then match AX window by frame
+    /// 3. Single-window fallback (only when app has exactly one window)
+    ///
+    /// Safety rules for multi-window apps:
+    /// - If windowID exists but can't be matched, and multiple windows exist → return nil
+    /// - If multiple AX windows have same frame → only proceed with unique title match, else return nil
+    /// - If no windowID saved (legacy data) and multiple windows → return nil
+    private func findWindow(matching spaceWindow: VirtualSpaceWindow, log: Bool = true) -> (AXUIElement, pid_t)? {
         // Find the app by bundle ID
         guard let app = NSWorkspace.shared.runningApplications.first(where: {
             $0.bundleIdentifier == spaceWindow.appBundleID && $0.activationPolicy == .regular
         }) else {
+            if log && debugLoggingEnabled {
+                let idString = spaceWindow.windowID.map(String.init) ?? "nil"
+                print("[VirtualSpaces] findWindow: app not running for \(spaceWindow.appBundleID) title='\(spaceWindow.windowTitle)' id=\(idString)")
+            }
             return nil
         }
 
@@ -429,45 +452,177 @@ class VirtualSpaceManager {
         var windowList: CFTypeRef?
         guard AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &windowList) == .success,
               let windows = windowList as? [AXUIElement] else {
+            if log && debugLoggingEnabled {
+                let idString = spaceWindow.windowID.map(String.init) ?? "nil"
+                print("[VirtualSpaces] findWindow: failed to get AX windows for \(spaceWindow.appBundleID) title='\(spaceWindow.windowTitle)' id=\(idString)")
+            }
             return nil
         }
 
-        // Try to find by title first
+        guard !windows.isEmpty else {
+            if log && debugLoggingEnabled {
+                let idString = spaceWindow.windowID.map(String.init) ?? "nil"
+                print("[VirtualSpaces] findWindow: no AX windows for \(spaceWindow.appBundleID) title='\(spaceWindow.windowTitle)' id=\(idString)")
+            }
+            return nil
+        }
+
+        if log && debugLoggingEnabled {
+            let savedIDString = spaceWindow.windowID.map(String.init) ?? "nil"
+            print("[VirtualSpaces] findWindow: target \(spaceWindow.appBundleID) title='\(spaceWindow.windowTitle)' id=\(savedIDString) frame=\(spaceWindow.frame)")
+        }
+
+        // Build list of AX windows with their properties
+        var axWindows: [AXWindowInfo] = []
         for axWindow in windows {
             var titleRef: CFTypeRef?
             AXUIElementCopyAttributeValue(axWindow, kAXTitleAttribute as CFString, &titleRef)
             let title = titleRef as? String ?? ""
-
-            if title == spaceWindow.windowTitle {
-                return (axWindow, pid)
-            }
-        }
-
-        // If no exact title match, try to find by position (closest to saved frame)
-        var closestWindow: AXUIElement?
-        var closestDistance = CGFloat.greatestFiniteMagnitude
-
-        for axWindow in windows {
             let frame = getWindowFrame(axWindow)
-            let distance = abs(frame.origin.x - spaceWindow.frame.origin.x) +
-                          abs(frame.origin.y - spaceWindow.frame.origin.y)
-
-            if distance < closestDistance {
-                closestDistance = distance
-                closestWindow = axWindow
+            let windowNumber = getAXWindowNumber(axWindow)
+            axWindows.append(AXWindowInfo(element: axWindow, frame: frame, title: title, windowNumber: windowNumber))
+        }
+        if log && debugLoggingEnabled {
+            print("[VirtualSpaces] findWindow: AX windows count=\(axWindows.count)")
+            for (index, axWindow) in axWindows.enumerated() {
+                let idString = axWindow.windowNumber.map(String.init) ?? "nil"
+                print("[VirtualSpaces]   AX[\(index)] title='\(axWindow.title)' id=\(idString) frame=\(axWindow.frame)")
             }
         }
 
-        if let window = closestWindow, closestDistance < 100 {
-            return (window, pid)
+        // If no saved windowID, require single-window app (legacy data needs re-save)
+        guard let savedWindowID = spaceWindow.windowID else {
+            if axWindows.count == 1 {
+                if log && debugLoggingEnabled {
+                    print("[VirtualSpaces] findWindow: no saved windowID; single-window fallback")
+                }
+                return (axWindows[0].element, pid)
+            }
+            if log && debugLoggingEnabled {
+                print("[VirtualSpaces] findWindow: no saved windowID; multiple windows -> no match")
+            }
+            return axWindows.count == 1 ? (axWindows[0].element, pid) : nil
         }
 
-        // Fall back to first window if only one window
-        if windows.count == 1 {
-            return (windows[0], pid)
+        // Strategy 1: Direct AX window number match (most reliable when available)
+        if let directMatch = axWindows.first(where: { $0.windowNumber == savedWindowID }) {
+            if log && debugLoggingEnabled {
+                print("[VirtualSpaces] findWindow: matched by AX window number id=\(savedWindowID)")
+            }
+            return (directMatch.element, pid)
+        }
+
+        // Strategy 2: CG → AX lookup via frame matching
+        let cgWindows = getWindowNumbersFromCGWindowList(forPID: pid)
+        if log && debugLoggingEnabled {
+            print("[VirtualSpaces] findWindow: CG windows count=\(cgWindows.count)")
+            for (index, cgWindow) in cgWindows.enumerated() {
+                print("[VirtualSpaces]   CG[\(index)] id=\(cgWindow.windowNumber) frame=\(cgWindow.frame)")
+            }
+        }
+
+        guard let cgWindow = cgWindows.first(where: { $0.windowNumber == savedWindowID }) else {
+            // WindowID not found in CGWindowList - window may be closed or app restarted
+            // Only safe fallback: single-window app
+            if axWindows.count == 1 {
+                if log && debugLoggingEnabled {
+                    print("[VirtualSpaces] findWindow: saved id \(savedWindowID) not in CG list; single-window fallback")
+                }
+                return (axWindows[0].element, pid)
+            }
+            if log && debugLoggingEnabled {
+                print("[VirtualSpaces] findWindow: saved id \(savedWindowID) not in CG list; multiple windows -> no match")
+            }
+            return axWindows.count == 1 ? (axWindows[0].element, pid) : nil
+        }
+
+        if log && debugLoggingEnabled {
+            print("[VirtualSpaces] findWindow: matched CG id=\(savedWindowID) frame=\(cgWindow.frame)")
+        }
+
+        // Found window in CGWindowList - find matching AX window(s) by frame
+        let frameTolerance: CGFloat = 30
+        let maxDistance = frameTolerance * 4  // 120px total Manhattan distance
+
+        let frameMatches = axWindows.filter { axWindow in
+            frameDistance(axWindow.frame, cgWindow.frame) < maxDistance
+        }
+
+        switch frameMatches.count {
+        case 0:
+            // No frame match - window might be minimized or in transition
+            // Fall back to single-window if available
+            if axWindows.count == 1 {
+                if log && debugLoggingEnabled {
+                    print("[VirtualSpaces] findWindow: no AX frame match; single-window fallback")
+                }
+                return (axWindows[0].element, pid)
+            }
+            if log && debugLoggingEnabled {
+                print("[VirtualSpaces] findWindow: no AX frame match; multiple windows -> no match")
+            }
+            return axWindows.count == 1 ? (axWindows[0].element, pid) : nil
+
+        case 1:
+            // Unique frame match - use it
+            if log && debugLoggingEnabled {
+                print("[VirtualSpaces] findWindow: matched by frame (unique)")
+            }
+            return (frameMatches[0].element, pid)
+
+        default:
+            // Multiple AX windows with same frame (ambiguous)
+            // Try to disambiguate by title
+            let titleMatches = frameMatches.filter { $0.title == spaceWindow.windowTitle }
+
+            if titleMatches.count == 1 {
+                // Unique title match within frame matches - use it
+                if log && debugLoggingEnabled {
+                    print("[VirtualSpaces] findWindow: matched by frame + title")
+                }
+                return (titleMatches[0].element, pid)
+            }
+
+            // Still ambiguous (multiple windows with same frame and title, or no title match)
+            // Don't guess - return nil for safety
+            if log && debugLoggingEnabled {
+                print("[VirtualSpaces] findWindow: ambiguous frame match; multiple windows -> no match")
+            }
+            return nil
+        }
+    }
+
+    /// AX window info for matching
+    private struct AXWindowInfo {
+        let element: AXUIElement
+        let frame: CGRect
+        let title: String
+        let windowNumber: UInt32?
+    }
+
+    /// Try to get window number directly from AX element
+    /// Attempts both standard and private attribute names
+    private func getAXWindowNumber(_ axWindow: AXUIElement) -> UInt32? {
+        // Try standard attribute first, then private variant
+        let attributeNames = ["AXWindowNumber", "_AXWindowNumber"]
+
+        for attrName in attributeNames {
+            var valueRef: CFTypeRef?
+            let result = AXUIElementCopyAttributeValue(axWindow, attrName as CFString, &valueRef)
+            if result == .success, let number = (valueRef as? NSNumber)?.uint32Value {
+                return number
+            }
         }
 
         return nil
+    }
+
+    /// Calculate Manhattan distance between two frames (origin + size)
+    private func frameDistance(_ lhs: CGRect, _ rhs: CGRect) -> CGFloat {
+        abs(lhs.origin.x - rhs.origin.x) +
+        abs(lhs.origin.y - rhs.origin.y) +
+        abs(lhs.size.width - rhs.size.width) +
+        abs(lhs.size.height - rhs.size.height)
     }
 
     /// Get the current frame of an AX window
@@ -629,7 +784,7 @@ class VirtualSpaceManager {
             for window in space.windows {
                 let identifier = WindowIdentifier(bundleID: window.appBundleID, title: window.windowTitle, zIndex: window.zIndex, pid: nil)
 
-                guard let (axWindow, _) = findWindow(matching: window),
+                guard let (axWindow, _) = findWindow(matching: window, log: false),
                       let lastFrame = lastFrames[identifier] else {
                     continue
                 }
@@ -794,6 +949,58 @@ class VirtualSpaceManager {
     }
 
     // MARK: - Helpers
+
+    /// Window info from CGWindowList
+    private struct CGWindowInfo {
+        let windowNumber: UInt32
+        let frame: CGRect
+    }
+
+    /// Get window numbers from CGWindowList for a specific PID
+    /// This is more reliable than AXWindowNumber which many apps don't expose
+    /// Note: We don't use .optionOnScreenOnly so that minimized windows can be found and restored
+    private func getWindowNumbersFromCGWindowList(forPID pid: pid_t) -> [CGWindowInfo] {
+        // Don't use .optionOnScreenOnly - we want to find minimized windows too
+        let windowListOptions: CGWindowListOption = [.excludeDesktopElements]
+        guard let windowList = CGWindowListCopyWindowInfo(windowListOptions, kCGNullWindowID) as? [[String: Any]] else {
+            return []
+        }
+
+        var results: [CGWindowInfo] = []
+
+        for windowInfo in windowList {
+            guard let windowPID = windowInfo[kCGWindowOwnerPID as String] as? pid_t,
+                  windowPID == pid else {
+                continue
+            }
+
+            guard let layer = windowInfo[kCGWindowLayer as String] as? Int,
+                  layer == 0 else {
+                continue
+            }
+
+            guard let windowNumber = (windowInfo[kCGWindowNumber as String] as? NSNumber)?.uint32Value,
+                  let boundsDict = windowInfo[kCGWindowBounds as String] as? [String: CGFloat],
+                  let x = boundsDict["X"],
+                  let y = boundsDict["Y"],
+                  let width = boundsDict["Width"],
+                  let height = boundsDict["Height"] else {
+                continue
+            }
+
+            // Convert from CGWindowList coordinates (top-left origin) to screen coordinates (bottom-left origin)
+            let frame = CGRect(
+                x: x,
+                y: self.primaryScreenHeight - y - height,
+                width: width,
+                height: height
+            )
+
+            results.append(CGWindowInfo(windowNumber: windowNumber, frame: frame))
+        }
+
+        return results
+    }
 
     /// Get existing space name if any
     private func getExistingSpaceName(number: Int, displayID: UInt32) -> String? {
