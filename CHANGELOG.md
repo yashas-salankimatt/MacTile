@@ -2,6 +2,31 @@
 
 All notable changes to MacTile will be documented in this file.
 
+## [1.2.0] - 2026-02-05
+
+### Added
+
+- **Sketchybar Integration**: Display virtual space indicators in your menu bar
+  - Automatic setup when enabled: deploys plugin scripts, helpers, and fonts
+  - Triggers `mactile_space_change` event with environment variables for each space action
+  - Supports custom sketchybar commands for advanced users
+  - Bundled resources: `mactile.sh`, `mactile_click.sh`, `mactile_space_name.sh`, `icon_map.sh`
+  - Automatically installs `sketchybar-app-font.ttf` for app icon ligatures
+  - IPC support via distributed notifications for restore/clear from sketchybar
+
+- **Configurable Overlay Modifiers**: Separate modifier keys for save/clear in overlay
+  - Save modifier (default: Shift) - hold while pressing number to save
+  - Clear modifier (default: Control) - hold while pressing number to clear
+  - Configurable in Settings → Virtual Spaces
+
+### Improved
+
+- **Sketchybar Service Management**: Properly stops sketchybar when integration is disabled
+  - Enable: restarts sketchybar to load MacTile configuration
+  - Disable: stops sketchybar via `brew services stop`
+
+- **Space Clear Events**: Now passes complete space information to sketchybar when clearing
+
 ## [1.1.2] - 2026-02-04
 
 ### Fixed
