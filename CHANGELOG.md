@@ -2,6 +2,28 @@
 
 All notable changes to MacTile will be documented in this file.
 
+## [1.1.2] - 2026-02-04
+
+### Fixed
+
+- **Reliable Window Matching for Multi-Window Apps**: Fixed virtual space restore failing for apps like Zen browser with multiple windows
+  - Now uses private `_AXUIElementGetWindow` API for direct window ID matching
+  - Falls back to frame-based heuristics when private API unavailable
+  - Eliminates ambiguity when multiple windows have similar frames
+
+- **Focus Restoration from Overlay**: Fixed focus not returning correctly after save/restore
+  - Save: Returns focus to the window that triggered the overlay
+  - Restore: Returns focus to a window in the restored virtual space
+  - Properly handles overlay dismissal timing to prevent focus race conditions
+
+### Improved
+
+- **Window Matching Strategy**: More robust multi-strategy approach
+  1. Direct window ID via private API (most reliable)
+  2. AXWindowNumber attributes (when exposed by apps)
+  3. Frame-based matching with tolerance (fallback)
+  - Only matches when confident; returns nil for safety when ambiguous
+
 ## [1.1.1] - 2026-02-04
 
 ### Added

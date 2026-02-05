@@ -1,5 +1,6 @@
 import AppKit
 import MacTileCore
+import Darwin
 
 /// Protocol for virtual space manager delegate
 protocol VirtualSpaceManagerDelegate: AnyObject {
@@ -37,6 +38,16 @@ class VirtualSpaceManager {
     private var debugLoggingEnabled: Bool {
         ProcessInfo.processInfo.environment["MACTILE_VS_DEBUG"] == "1"
     }
+    private var didLogPrivateAXSuccess = false
+    private var didLogPrivateAXFallback = false
+    private typealias AXUIElementGetWindowFunc = @convention(c) (AXUIElement, UnsafeMutablePointer<CGWindowID>) -> AXError
+    private lazy var axGetWindowFunc: AXUIElementGetWindowFunc? = {
+        let rtldDefault = UnsafeMutableRawPointer(bitPattern: -2) // RTLD_DEFAULT
+        guard let symbol = dlsym(rtldDefault, "_AXUIElementGetWindow") else {
+            return nil
+        }
+        return unsafeBitCast(symbol, to: AXUIElementGetWindowFunc.self)
+    }()
 
     private init() {
         ensureActivationObserver()
@@ -603,7 +614,27 @@ class VirtualSpaceManager {
     /// Try to get window number directly from AX element
     /// Attempts both standard and private attribute names
     private func getAXWindowNumber(_ axWindow: AXUIElement) -> UInt32? {
-        // Try standard attribute first, then private variant
+        // 1) Try private API first (most reliable, avoids frame heuristics)
+        if let axGetWindowFunc = axGetWindowFunc {
+            var windowID: CGWindowID = 0
+            let result = axGetWindowFunc(axWindow, &windowID)
+            if result == .success, windowID != 0 {
+                if debugLoggingEnabled && !didLogPrivateAXSuccess {
+                    print("[VirtualSpaces] AX window id: using _AXUIElementGetWindow")
+                    didLogPrivateAXSuccess = true
+                }
+                return UInt32(windowID)
+            }
+            if debugLoggingEnabled && !didLogPrivateAXFallback {
+                print("[VirtualSpaces] AX window id: _AXUIElementGetWindow failed; falling back to AXWindowNumber attributes")
+                didLogPrivateAXFallback = true
+            }
+        } else if debugLoggingEnabled && !didLogPrivateAXFallback {
+            print("[VirtualSpaces] AX window id: private API unavailable; falling back to AXWindowNumber attributes")
+            didLogPrivateAXFallback = true
+        }
+
+        // 2) Try standard attribute, then private attribute variant
         let attributeNames = ["AXWindowNumber", "_AXWindowNumber"]
 
         for attrName in attributeNames {
