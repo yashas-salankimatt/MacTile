@@ -8,6 +8,31 @@ MacTile can integrate with [sketchybar](https://github.com/FelixKratz/SketchyBar
 2. Go to the "Virtual Spaces" tab
 3. Check "Enable Sketchybar Integration"
 
+### What Happens Automatically
+
+When you enable the integration, MacTile will:
+
+1. **Deploy plugin scripts** to `~/.config/sketchybar/plugins/`:
+   - `mactile.sh` - Main space indicator script
+   - `mactile_click.sh` - Click handler for restore/clear
+   - `mactile_space_name.sh` - Active space name display
+
+2. **Check your sketchybarrc**:
+   - If no `sketchybarrc` exists, MacTile deploys a complete working template
+   - If one exists but isn't configured for MacTile, you'll see a dialog with instructions
+
+3. **Restart sketchybar** via `brew services restart sketchybar`
+
+### If Your sketchybarrc Already Exists
+
+If you have an existing sketchybar configuration, MacTile will detect that it's not configured for MacTile and show a dialog. You'll need to manually add the MacTile sections to your config. An example config is placed at:
+
+```
+~/.config/sketchybar/sketchybarrc.mactile-example
+```
+
+Copy the relevant sections from this file into your existing `sketchybarrc`.
+
 ## How It Works
 
 When enabled, MacTile triggers a custom sketchybar event (`mactile_space_change`) whenever:

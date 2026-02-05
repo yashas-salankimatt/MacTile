@@ -1,0 +1,133 @@
+#!/bin/bash
+
+# Sketchybar configuration with MacTile Virtual Spaces integration
+# This is a minimal config focused on MacTile functionality
+# Customize as needed for your setup
+
+PLUGIN_DIR="$CONFIG_DIR/plugins"
+
+##### Bar Appearance #####
+bar=(
+  height=40
+  color=0x40000000
+  shadow=off
+  position=top
+  sticky=on
+  padding_right=20
+  padding_left=20
+  corner_radius=0
+  y_offset=0
+  margin=0
+  blur_radius=30
+  border_width=0
+)
+
+sketchybar --bar "${bar[@]}"
+
+##### Changing Defaults #####
+defaults=(
+  updates=when_shown
+  icon.font="Hack Nerd Font:Bold:17.0"
+  icon.color=0xffffffff
+  icon.padding_left=4
+  icon.padding_right=4
+  label.font="Hack Nerd Font:Bold:14.0"
+  label.color=0xffffffff
+  label.padding_left=4
+  label.padding_right=4
+  padding_right=5
+  padding_left=5
+  background.height=30
+  background.corner_radius=5
+  background.border_width=0
+)
+
+sketchybar --default "${defaults[@]}"
+
+##### MacTile Virtual Spaces #####
+# Register the MacTile event
+sketchybar --add event mactile_space_change
+
+# Add MacTile virtual space indicators (0-9) with app icons
+# IMPORTANT: updates=on ensures scripts run even when drawing=off
+MACTILE_SPACES=("0" "1" "2" "3" "4" "5" "6" "7" "8" "9")
+for i in "${!MACTILE_SPACES[@]}"
+do
+  sid="${MACTILE_SPACES[i]}"
+  mactile_space=(
+    updates=on
+    icon="$sid"
+    icon.font="Hack Nerd Font:Bold:17.0"
+    icon.color=0xff666666
+    icon.padding_left=10
+    icon.padding_right=6
+    background.color=0x00000000
+    background.corner_radius=5
+    background.height=25
+    background.border_width=0
+    label.font="sketchybar-app-font:Regular:18.0"
+    label.color=0xffcccccc
+    label.padding_left=6
+    label.padding_right=12
+    label.background.height=26
+    label.background.drawing=on
+    label.background.color=0x40494d64
+    label.background.corner_radius=8
+    label.drawing=off
+    drawing=off
+    script="$PLUGIN_DIR/mactile.sh"
+    click_script="$PLUGIN_DIR/mactile_click.sh $sid"
+  )
+  sketchybar --add item mactile.space."$sid" left \
+             --set mactile.space."$sid" "${mactile_space[@]}" \
+             --subscribe mactile.space."$sid" mactile_space_change
+done
+
+##### Active Space Name (shown before front app) #####
+# This shows the name of the currently active virtual space
+mactile_space_name=(
+  updates=on
+  drawing=off
+  icon.drawing=off
+  label.font="Hack Nerd Font:Bold:11.0"
+  label.color=0xff888888
+  label.padding_left=10
+  label.padding_right=0
+  label=""
+  script="$PLUGIN_DIR/mactile_space_name.sh"
+)
+
+sketchybar --add item mactile.space_name left \
+           --set mactile.space_name "${mactile_space_name[@]}" \
+           --subscribe mactile.space_name mactile_space_change
+
+##### Front App #####
+front_app=(
+  icon.drawing=off
+  padding_left=0
+  label.color=0xffffffff
+  label.font="Hack Nerd Font:Bold:14.0"
+  script="$PLUGIN_DIR/front_app.sh"
+)
+
+sketchybar --add item front_app left \
+           --set front_app "${front_app[@]}" \
+           --subscribe front_app front_app_switched
+
+##### Right Side Items #####
+
+##### Clock #####
+clock=(
+  icon=
+  icon.font="Hack Nerd Font:Bold:17.0"
+  update_freq=10
+  script="$PLUGIN_DIR/clock.sh"
+)
+
+sketchybar --add item clock right \
+           --set clock "${clock[@]}"
+
+##### Force all scripts to run the first time #####
+sketchybar --update
+
+echo "sketchybar configuration loaded.."

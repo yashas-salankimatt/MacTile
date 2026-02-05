@@ -1074,7 +1074,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         y -= 24
 
         // Sketchybar integration checkbox
-        sketchybarIntegrationCheckbox = NSButton(checkboxWithTitle: "Enable Sketchybar Integration", target: nil, action: nil)
+        sketchybarIntegrationCheckbox = NSButton(checkboxWithTitle: "Enable Sketchybar Integration", target: self, action: #selector(toggleSketchybarIntegration))
         sketchybarIntegrationCheckbox.frame = NSRect(x: 20, y: y, width: 250, height: 20)
         view.addSubview(sketchybarIntegrationCheckbox)
 
@@ -1287,6 +1287,40 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         recordedOverlayClearModifiers = defaults.overlayVirtualSpaceClearModifiers
         overlaySaveModifiersField.stringValue = OverlayKeyboardSettings.modifierDisplayString(defaults.overlayVirtualSpaceSaveModifiers)
         overlayClearModifiersField.stringValue = OverlayKeyboardSettings.modifierDisplayString(defaults.overlayVirtualSpaceClearModifiers)
+    }
+
+    @objc private func toggleSketchybarIntegration() {
+        let isEnabled = sketchybarIntegrationCheckbox.state == .on
+
+        // Update settings immediately
+        SettingsManager.shared.updateSketchybarIntegration(isEnabled)
+
+        if isEnabled {
+            // Enable integration - deploy files and restart sketchybar
+            let result = SketchybarIntegration.shared.enableIntegration()
+
+            switch result {
+            case .success:
+                print("[Settings] Sketchybar integration enabled successfully")
+            case .failure(let error):
+                if case .sketchybarrcNotConfigured = error {
+                    // sketchybarrc exists but not configured - show modal
+                    SketchybarIntegration.shared.deployExampleSketchybarrc()
+                    SketchybarIntegration.shared.showConfigurationRequiredAlert()
+                } else {
+                    // Other error - show alert
+                    let alert = NSAlert()
+                    alert.messageText = "Sketchybar Integration Error"
+                    alert.informativeText = error.localizedDescription
+                    alert.alertStyle = .warning
+                    alert.runModal()
+                }
+            }
+        } else {
+            // Disable integration - just restart sketchybar
+            SketchybarIntegration.shared.disableIntegration()
+            print("[Settings] Sketchybar integration disabled")
+        }
     }
 
     @objc private func toggleRecordSaveModifiers() {

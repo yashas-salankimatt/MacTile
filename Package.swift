@@ -18,7 +18,11 @@ let package = Package(
         .executableTarget(
             name: "MacTile",
             dependencies: ["HotKey", "MacTileCore"],
-            path: "Sources/MacTile"
+            path: "Sources/MacTile",
+            resources: [
+                .copy("../../sketchybar/plugins"),
+                .copy("../../sketchybar/sketchybarrc")
+            ]
         ),
         .target(
             name: "MacTileCore",
