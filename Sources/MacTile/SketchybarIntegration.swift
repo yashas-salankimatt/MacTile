@@ -98,8 +98,8 @@ class SketchybarIntegration {
     /// Disable sketchybar integration
     func disableIntegration() {
         print("[SketchybarIntegration] Disabling integration...")
-        // Just restart sketchybar to reload config
-        restartSketchybar()
+        // Stop sketchybar
+        stopSketchybar()
     }
 
     /// Check if sketchybarrc is configured for MacTile
@@ -260,6 +260,34 @@ class SketchybarIntegration {
                 }
             } catch {
                 return .failure(.sketchybarrcDeploymentFailed(error.localizedDescription))
+            }
+        }
+    }
+
+    private func stopSketchybar() {
+        print("[SketchybarIntegration] Stopping sketchybar...")
+
+        DispatchQueue.global(qos: .utility).async {
+            // Try brew services first (Apple Silicon)
+            let stopProcess = Process()
+            stopProcess.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/brew")
+            stopProcess.arguments = ["services", "stop", "sketchybar"]
+            stopProcess.standardOutput = FileHandle.nullDevice
+            stopProcess.standardError = FileHandle.nullDevice
+
+            do {
+                try stopProcess.run()
+                stopProcess.waitUntilExit()
+                print("[SketchybarIntegration] Sketchybar stopped via brew services")
+            } catch {
+                // Try /usr/local/bin/brew for Intel Macs
+                let intelStopProcess = Process()
+                intelStopProcess.executableURL = URL(fileURLWithPath: "/usr/local/bin/brew")
+                intelStopProcess.arguments = ["services", "stop", "sketchybar"]
+                intelStopProcess.standardOutput = FileHandle.nullDevice
+                intelStopProcess.standardError = FileHandle.nullDevice
+                try? intelStopProcess.run()
+                intelStopProcess.waitUntilExit()
             }
         }
     }
