@@ -18,6 +18,17 @@ class SketchybarIntegration {
         sketchybarConfigDir.appendingPathComponent("plugins")
     }
 
+    /// Helpers directory
+    private var helpersDir: URL {
+        sketchybarConfigDir.appendingPathComponent("helpers")
+    }
+
+    /// User fonts directory
+    private var userFontsDir: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Fonts")
+    }
+
     /// sketchybarrc path
     private var sketchybarrcPath: URL {
         sketchybarConfigDir.appendingPathComponent("sketchybarrc")
@@ -59,10 +70,26 @@ class SketchybarIntegration {
             return .failure(.pluginDeploymentFailed(error.localizedDescription))
         }
 
-        // 3. Check/deploy sketchybarrc
+        // 3. Deploy helper scripts (icon_map.sh)
+        do {
+            try deployHelperScripts()
+        } catch {
+            print("[SketchybarIntegration] Warning: Failed to deploy helpers: \(error)")
+            // Non-fatal - continue without helpers
+        }
+
+        // 4. Install font if needed
+        do {
+            try installFontIfNeeded()
+        } catch {
+            print("[SketchybarIntegration] Warning: Failed to install font: \(error)")
+            // Non-fatal - continue without font
+        }
+
+        // 5. Check/deploy sketchybarrc
         let sketchybarrcResult = handleSketchybarrc()
 
-        // 4. Restart sketchybar
+        // 6. Restart sketchybar
         restartSketchybar()
 
         return sketchybarrcResult
@@ -143,6 +170,66 @@ class SketchybarIntegration {
                     print("[SketchybarIntegration] Deployed basic plugin: \(filename)")
                 }
             }
+        }
+    }
+
+    private func deployHelperScripts() throws {
+        // Create helpers directory if it doesn't exist
+        if !fileManager.fileExists(atPath: helpersDir.path) {
+            try fileManager.createDirectory(at: helpersDir, withIntermediateDirectories: true)
+        }
+
+        // Get the bundle resource URL for helpers
+        guard let helpersResourceURL = Bundle.main.resourceURL?.appendingPathComponent("helpers") else {
+            print("[SketchybarIntegration] Helpers directory not found in bundle")
+            return
+        }
+
+        // Deploy icon_map.sh (always overwrite to ensure latest version)
+        let iconMapSource = helpersResourceURL.appendingPathComponent("icon_map.sh")
+        let iconMapDest = helpersDir.appendingPathComponent("icon_map.sh")
+
+        if fileManager.fileExists(atPath: iconMapSource.path) {
+            if fileManager.fileExists(atPath: iconMapDest.path) {
+                try fileManager.removeItem(at: iconMapDest)
+            }
+            try fileManager.copyItem(at: iconMapSource, to: iconMapDest)
+            try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: iconMapDest.path)
+            print("[SketchybarIntegration] Deployed: icon_map.sh")
+        } else {
+            print("[SketchybarIntegration] Warning: icon_map.sh not found in bundle")
+        }
+    }
+
+    private func installFontIfNeeded() throws {
+        let fontName = "sketchybar-app-font.ttf"
+        let fontDestPath = userFontsDir.appendingPathComponent(fontName)
+
+        // Check if font is already installed
+        if fileManager.fileExists(atPath: fontDestPath.path) {
+            print("[SketchybarIntegration] Font already installed: \(fontName)")
+            return
+        }
+
+        // Get the bundle resource URL for fonts
+        guard let fontsResourceURL = Bundle.main.resourceURL?.appendingPathComponent("fonts") else {
+            print("[SketchybarIntegration] Fonts directory not found in bundle")
+            return
+        }
+
+        let fontSourcePath = fontsResourceURL.appendingPathComponent(fontName)
+
+        if fileManager.fileExists(atPath: fontSourcePath.path) {
+            // Create Fonts directory if it doesn't exist (unlikely but just in case)
+            if !fileManager.fileExists(atPath: userFontsDir.path) {
+                try fileManager.createDirectory(at: userFontsDir, withIntermediateDirectories: true)
+            }
+
+            try fileManager.copyItem(at: fontSourcePath, to: fontDestPath)
+            print("[SketchybarIntegration] Installed font: \(fontName)")
+            print("[SketchybarIntegration] Note: You may need to restart applications to use the new font")
+        } else {
+            print("[SketchybarIntegration] Warning: Font not found in bundle: \(fontName)")
         }
     }
 

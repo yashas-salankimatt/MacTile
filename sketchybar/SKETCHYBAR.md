@@ -17,11 +17,18 @@ When you enable the integration, MacTile will:
    - `mactile_click.sh` - Click handler for restore/clear
    - `mactile_space_name.sh` - Active space name display
 
-2. **Check your sketchybarrc**:
+2. **Deploy helper scripts** to `~/.config/sketchybar/helpers/`:
+   - `icon_map.sh` - App name to icon mapping (from sketchybar-app-font)
+
+3. **Install the sketchybar-app-font** to `~/Library/Fonts/`:
+   - `sketchybar-app-font.ttf` - Font with app icon ligatures
+   - Only installed if not already present
+
+4. **Check your sketchybarrc**:
    - If no `sketchybarrc` exists, MacTile deploys a complete working template
    - If one exists but isn't configured for MacTile, you'll see a dialog with instructions
 
-3. **Restart sketchybar** via `brew services restart sketchybar`
+5. **Restart sketchybar** via `brew services restart sketchybar`
 
 ### If Your sketchybarrc Already Exists
 

@@ -21,6 +21,8 @@ let package = Package(
             path: "Sources/MacTile",
             resources: [
                 .copy("../../sketchybar/plugins"),
+                .copy("../../sketchybar/helpers"),
+                .copy("../../sketchybar/fonts"),
                 .copy("../../sketchybar/sketchybarrc")
             ]
         ),
