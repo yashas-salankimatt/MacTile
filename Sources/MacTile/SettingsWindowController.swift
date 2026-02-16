@@ -4,7 +4,13 @@ import HotKey
 
 /// Window controller for MacTile settings
 class SettingsWindowController: NSWindowController, NSWindowDelegate {
-    private var tabView: NSTabView!
+    // Sidebar navigation
+    private var sidebarButtons: [NSButton] = []
+    private var sidebarHighlight: NSView!
+    private var contentPages: [NSView] = []
+    private var contentContainer: NSView!
+    private var currentPageIndex = 0
+    private let sidebarWidth: CGFloat = 170
 
     // General tab
     private var gridSizesField: NSTextField!
@@ -107,12 +113,17 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 660, height: 580),
-            styleMask: [.titled, .closable],
+            contentRect: NSRect(x: 0, y: 0, width: 780, height: 560),
+            styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         window.title = "MacTile Settings"
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.backgroundColor = .clear
+        window.isMovableByWindowBackground = true
         window.center()
         window.isReleasedWhenClosed = false
 
@@ -166,6 +177,27 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
             restoreModifiersMonitor = nil
         }
         isRecordingRestoreModifiers = false
+
+        // Clean up clear modifiers monitor
+        if let monitor = clearModifiersMonitor {
+            NSEvent.removeMonitor(monitor)
+            clearModifiersMonitor = nil
+        }
+        isRecordingClearModifiers = false
+
+        // Clean up overlay save modifiers monitor
+        if let monitor = overlaySaveModifiersMonitor {
+            NSEvent.removeMonitor(monitor)
+            overlaySaveModifiersMonitor = nil
+        }
+        isRecordingOverlaySaveModifiers = false
+
+        // Clean up overlay clear modifiers monitor
+        if let monitor = overlayClearModifiersMonitor {
+            NSEvent.removeMonitor(monitor)
+            overlayClearModifiersMonitor = nil
+        }
+        isRecordingOverlayClearModifiers = false
     }
 
     /// Sets up the main application menu with Edit menu for copy/paste support
@@ -199,61 +231,174 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private func setupUI() {
-        guard let window = window else { return }
+        guard let window = window, let windowContent = window.contentView else { return }
 
-        // Create tab view
-        tabView = NSTabView(frame: NSRect(x: 20, y: 60, width: 620, height: 500))
-        tabView.autoresizingMask = [.width, .height]
+        // Full-window vibrancy background
+        let effectView = NSVisualEffectView(frame: windowContent.bounds)
+        effectView.autoresizingMask = [.width, .height]
+        effectView.material = .sidebar
+        effectView.state = .active
+        effectView.blendingMode = .behindWindow
+        windowContent.addSubview(effectView)
 
-        // Add tabs
-        let generalTab = createGeneralTab()
-        generalTab.label = "General"
-        tabView.addTabViewItem(generalTab)
+        let winH = windowContent.bounds.height
+        let winW = windowContent.bounds.width
 
-        let shortcutsTab = createShortcutsTab()
-        shortcutsTab.label = "Shortcuts"
-        tabView.addTabViewItem(shortcutsTab)
+        // === SIDEBAR ===
+        setupSidebar(in: effectView, height: winH)
 
-        let appearanceTab = createAppearanceTab()
-        appearanceTab.label = "Appearance"
-        tabView.addTabViewItem(appearanceTab)
+        // Vertical separator
+        let separator = NSView(frame: NSRect(x: sidebarWidth, y: 0, width: 1, height: winH))
+        separator.wantsLayer = true
+        separator.layer?.backgroundColor = NSColor.separatorColor.cgColor
+        separator.autoresizingMask = [.height]
+        effectView.addSubview(separator)
 
-        let presetsTab = createPresetsTab()
-        presetsTab.label = "Presets"
-        tabView.addTabViewItem(presetsTab)
+        // === CONTENT AREA ===
+        let contentX = sidebarWidth + 1
+        let buttonBarHeight: CGFloat = 50
+        contentContainer = NSView(frame: NSRect(
+            x: contentX, y: buttonBarHeight,
+            width: winW - contentX, height: winH - buttonBarHeight
+        ))
+        contentContainer.autoresizingMask = [.width, .height]
+        effectView.addSubview(contentContainer)
 
-        let focusTab = createFocusTab()
-        focusTab.label = "Focus"
-        tabView.addTabViewItem(focusTab)
+        // Create all content pages
+        let pages = [
+            createGeneralContent(),
+            createShortcutsContent(),
+            createAppearanceContent(),
+            createPresetsContent(),
+            createFocusContent(),
+            createVirtualSpacesContent(),
+            createAboutContent()
+        ]
 
-        let virtualSpacesTab = createVirtualSpacesTab()
-        virtualSpacesTab.label = "Spaces"
-        tabView.addTabViewItem(virtualSpacesTab)
+        for (i, page) in pages.enumerated() {
+            page.frame = contentContainer.bounds
+            page.autoresizingMask = [.width, .height]
+            page.isHidden = (i != 0)
+            contentContainer.addSubview(page)
+        }
+        contentPages = pages
 
-        let aboutTab = createAboutTab()
-        aboutTab.label = "About"
-        tabView.addTabViewItem(aboutTab)
-
-        window.contentView?.addSubview(tabView)
-
-        // Add Apply button at the bottom (no global reset - each tab has its own)
-        let buttonY: CGFloat = 20
-
-        let applyButton = NSButton(frame: NSRect(x: 460, y: buttonY, width: 80, height: 24))
+        // === BUTTON BAR ===
+        let applyButton = NSButton(frame: NSRect(x: winW - 100, y: 12, width: 80, height: 28))
         applyButton.title = "Apply"
         applyButton.bezelStyle = .rounded
         applyButton.target = self
         applyButton.action = #selector(applySettings)
         applyButton.keyEquivalent = "\r"
-        window.contentView?.addSubview(applyButton)
+        effectView.addSubview(applyButton)
 
-        let cancelButton = NSButton(frame: NSRect(x: 370, y: buttonY, width: 80, height: 24))
+        let cancelButton = NSButton(frame: NSRect(x: winW - 190, y: 12, width: 80, height: 28))
         cancelButton.title = "Cancel"
         cancelButton.bezelStyle = .rounded
         cancelButton.target = self
         cancelButton.action = #selector(cancelSettings)
-        cancelButton.keyEquivalent = "\u{1b}"  // Escape key
-        window.contentView?.addSubview(cancelButton)
+        cancelButton.keyEquivalent = "\u{1b}"
+        effectView.addSubview(cancelButton)
+
+        // Select first sidebar item (without animation for initial display)
+        if !sidebarButtons.isEmpty {
+            sidebarHighlight.frame = sidebarButtons[0].frame
+        }
+        selectSidebarItem(0)
+    }
+
+    // MARK: - Sidebar
+
+    private func setupSidebar(in parent: NSView, height: CGFloat) {
+        let items: [(icon: String, title: String)] = [
+            ("gearshape", "General"),
+            ("keyboard", "Shortcuts"),
+            ("paintbrush", "Appearance"),
+            ("square.grid.2x2", "Presets"),
+            ("eye", "Focus"),
+            ("rectangle.stack", "Spaces"),
+            ("info.circle", "About")
+        ]
+
+        // Selection highlight (positioned later in selectSidebarItem)
+        sidebarHighlight = NSView(frame: .zero)
+        sidebarHighlight.wantsLayer = true
+        sidebarHighlight.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.1).cgColor
+        sidebarHighlight.layer?.cornerRadius = 6
+        parent.addSubview(sidebarHighlight)
+
+        // Position items from top, below title bar area
+        let topInset: CGFloat = 50
+        var y = height - topInset
+        let itemHeight: CGFloat = 30
+        let itemGap: CGFloat = 2
+        let itemX: CGFloat = 12
+        let itemWidth = sidebarWidth - 24
+
+        for (i, item) in items.enumerated() {
+            y -= itemHeight
+
+            let btn = NSButton(frame: NSRect(x: itemX, y: y, width: itemWidth, height: itemHeight))
+            btn.isBordered = false
+            btn.title = "  \(item.title)"
+            btn.alignment = .left
+            btn.font = NSFont.systemFont(ofSize: 13, weight: .regular)
+            btn.contentTintColor = .secondaryLabelColor
+            btn.imagePosition = .imageLeft
+
+            if let img = NSImage(systemSymbolName: item.icon, accessibilityDescription: item.title) {
+                let config = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
+                btn.image = img.withSymbolConfiguration(config)
+            }
+
+            btn.tag = i
+            btn.target = self
+            btn.action = #selector(sidebarItemClicked(_:))
+
+            parent.addSubview(btn)
+            sidebarButtons.append(btn)
+
+            y -= itemGap
+        }
+    }
+
+    @objc private func sidebarItemClicked(_ sender: NSButton) {
+        selectSidebarItem(sender.tag)
+    }
+
+    private func selectSidebarItem(_ index: Int) {
+        guard index >= 0, index < contentPages.count, index < sidebarButtons.count else { return }
+
+        // Hide current, show new
+        if currentPageIndex < contentPages.count {
+            contentPages[currentPageIndex].isHidden = true
+        }
+        contentPages[index].isHidden = false
+        currentPageIndex = index
+
+        // Animate highlight to selected button
+        let targetFrame = sidebarButtons[index].frame
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            sidebarHighlight.animator().frame = targetFrame
+        }
+
+        // Update button tints
+        for (i, btn) in sidebarButtons.enumerated() {
+            btn.contentTintColor = (i == index) ? .white : .secondaryLabelColor
+            btn.font = NSFont.systemFont(ofSize: 13, weight: (i == index) ? .medium : .regular)
+        }
+    }
+
+    // MARK: - Card Section Helper
+
+    private func addCardBackground(to view: NSView, frame: NSRect) {
+        let card = NSView(frame: frame)
+        card.wantsLayer = true
+        card.layer?.backgroundColor = NSColor(white: 1.0, alpha: 0.04).cgColor
+        card.layer?.cornerRadius = 8
+        view.addSubview(card, positioned: .below, relativeTo: nil)
     }
 
     @objc private func cancelSettings() {
@@ -262,8 +407,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window?.close()
     }
 
-    private func createGeneralTab() -> NSTabViewItem {
-        let item = NSTabViewItem()
+    private func createGeneralContent() -> NSView {
         let view = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 460))
 
         var y: CGFloat = 420
@@ -390,8 +534,11 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         resetButton.action = #selector(resetGeneralSettings)
         view.addSubview(resetButton)
 
-        item.view = view
-        return item
+        // Card backgrounds for visual grouping
+        addCardBackground(to: view, frame: NSRect(x: 8, y: 240, width: 584, height: 200))
+        addCardBackground(to: view, frame: NSRect(x: 8, y: 48, width: 584, height: 185))
+
+        return view
     }
 
     @objc private func resetGeneralSettings() {
@@ -421,8 +568,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         showMonitorIndicatorCheckbox.state = defaults.showMonitorIndicator ? .on : .off
     }
 
-    private func createShortcutsTab() -> NSTabViewItem {
-        let item = NSTabViewItem()
+    private func createShortcutsContent() -> NSView {
         let view = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 460))
 
         var y: CGFloat = 420
@@ -558,8 +704,11 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         resetButton.action = #selector(resetShortcutSettings)
         view.addSubview(resetButton)
 
-        item.view = view
-        return item
+        // Card backgrounds
+        addCardBackground(to: view, frame: NSRect(x: 8, y: 290, width: 584, height: 150))
+        addCardBackground(to: view, frame: NSRect(x: 8, y: 22, width: 584, height: 262))
+
+        return view
     }
 
     @objc private func resetShortcutSettings() {
@@ -594,8 +743,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         cycleGridKeyPopup.selectItem(at: keyCodeToCycleIndex(keyboard.cycleGridKeyCode))
     }
 
-    private func createAppearanceTab() -> NSTabViewItem {
-        let item = NSTabViewItem()
+    private func createAppearanceContent() -> NSView {
         let view = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 460))
 
         var y: CGFloat = 420
@@ -726,8 +874,11 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         resetButton.action = #selector(resetAppearanceSettings)
         view.addSubview(resetButton)
 
-        item.view = view
-        return item
+        // Card backgrounds
+        addCardBackground(to: view, frame: NSRect(x: 8, y: 270, width: 584, height: 170))
+        addCardBackground(to: view, frame: NSRect(x: 8, y: 118, width: 584, height: 145))
+
+        return view
     }
 
     @objc private func resetAppearanceSettings() {
@@ -755,8 +906,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         targetMarkerColorWell.color = defaults.targetMarkerColor.nsColor
     }
 
-    private func createPresetsTab() -> NSTabViewItem {
-        let item = NSTabViewItem()
+    private func createPresetsContent() -> NSView {
         let view = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 460))
 
         var y: CGFloat = 420
@@ -826,8 +976,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         resetButton.action = #selector(resetPresetsSettings)
         view.addSubview(resetButton)
 
-        item.view = view
-        return item
+        return view
     }
 
     @objc private func resetPresetsSettings() {
@@ -885,14 +1034,14 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
         // Reposition remaining rows
         for (i, row) in presetRows.enumerated() {
-            let rowHeight: CGFloat = 60
+            let rowHeight: CGFloat = 35
             row.frame.origin.y = CGFloat(i) * rowHeight
         }
         updatePresetsContainerHeight()
     }
 
     private func updatePresetsContainerHeight() {
-        let rowHeight: CGFloat = 60
+        let rowHeight: CGFloat = 35
         let height = max(300, CGFloat(presetRows.count) * rowHeight + 10)
         presetsContainer.frame.size.height = height
 
@@ -906,8 +1055,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     // MARK: - Focus Tab
 
-    private func createFocusTab() -> NSTabViewItem {
-        let item = NSTabViewItem()
+    private func createFocusContent() -> NSView {
         let view = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 460))
 
         var y: CGFloat = 420
@@ -975,8 +1123,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         resetButton.action = #selector(resetFocusSettings)
         view.addSubview(resetButton)
 
-        item.view = view
-        return item
+        return view
     }
 
     @objc private func resetFocusSettings() {
@@ -1049,8 +1196,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         focusPresetsContainer.needsLayout = true
     }
 
-    private func createVirtualSpacesTab() -> NSTabViewItem {
-        let item = NSTabViewItem()
+    private func createVirtualSpacesContent() -> NSView {
         let view = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 460))
 
         var y: CGFloat = 420
@@ -1266,8 +1412,11 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         resetButton.action = #selector(resetVirtualSpacesSettings)
         view.addSubview(resetButton)
 
-        item.view = view
-        return item
+        // Card backgrounds
+        addCardBackground(to: view, frame: NSRect(x: 8, y: 270, width: 584, height: 170))
+        addCardBackground(to: view, frame: NSRect(x: 8, y: 60, width: 584, height: 203))
+
+        return view
     }
 
     @objc private func resetVirtualSpacesSettings() {
@@ -1715,8 +1864,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         overlayClearModifiersField.stringValue = OverlayKeyboardSettings.modifierDisplayString(settings.overlayVirtualSpaceClearModifiers)
     }
 
-    private func createAboutTab() -> NSTabViewItem {
-        let item = NSTabViewItem()
+    private func createAboutContent() -> NSView {
         let view = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 460))
 
         let centerX = view.bounds.width / 2
@@ -1791,8 +1939,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         urlLabel.backgroundColor = .clear
         view.addSubview(urlLabel)
 
-        item.view = view
-        return item
+        return view
     }
 
     @objc private func openGitHubRepo() {
