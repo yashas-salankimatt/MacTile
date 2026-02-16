@@ -2,6 +2,28 @@
 
 All notable changes to MacTile will be documented in this file.
 
+## [1.3.0] - 2026-02-16
+
+### Added
+
+- **Virtual Workspace Management Overlay**: View and manage saved virtual workspace contents directly from the overlay
+  - Press Enter without modifying the grid selection to open the management panel
+  - Browse all non-empty workspaces with their saved windows listed per workspace
+  - Navigate with arrow keys or vim bindings (J/K) between workspaces and individual windows
+  - Remove individual windows from a workspace with Backspace/Delete or `X`
+  - Native macOS blur panel with floating HUD appearance
+  - Automatically returns focus to the previously active window on dismiss
+
+### Improved
+
+- **Redesigned Settings Window**: Modern dark vibrancy sidebar navigation replaces the previous tab-based layout
+  - SF Symbols icons for each settings section (General, Shortcuts, Appearance, Presets, Focus, Spaces, About)
+  - Transparent titlebar with full-size content view
+  - Animated sidebar highlight transitions between sections
+  - Wider window layout (780px) for better content spacing
+
+- **Event Monitor Cleanup**: Fixed potential leaks for clear modifier and overlay save/clear modifier monitors when the settings window is closed
+
 ## [1.2.0] - 2026-02-05
 
 ### Added

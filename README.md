@@ -12,9 +12,10 @@ A macOS window tiling application inspired by [gTile](https://github.com/gTile/g
 - **Dual Global Hotkeys**: Primary (`Control+Option+G`) and secondary (`Command+Return`) shortcuts
 - **Tiling Presets**: Quick keyboard shortcuts to tile windows to predefined positions with cycling support
 - **Focus Presets**: Keyboard shortcuts to quickly focus applications and cycle through their windows
-- **Virtual Spaces**: Save and restore window arrangements per monitor with 9 spaces each
+- **Virtual Spaces**: Save and restore window arrangements per monitor with 10 spaces each
+- **Workspace Management**: View and remove saved windows from virtual workspaces via an in-overlay panel
 - **Customizable Appearance**: Configure colors, opacity, and visual elements
-- **Settings Window**: Configure grid sizes, spacing, insets, shortcuts, and behavior
+- **Settings Window**: Modern dark vibrancy sidebar navigation for configuring all options
 - **Menu Bar App**: Runs in the menu bar with no dock icon
 
 ## Usage
@@ -208,6 +209,26 @@ When saving a virtual space, MacTile only captures windows that are meaningfully
 6. Name it "Communication"
 7. Now switch between setups instantly with `Control+Option+1` and `Control+Option+2`
 
+## Workspace Management
+
+When the overlay is open, press Enter without modifying the grid selection to open the workspace management panel. This lets you browse and edit your saved virtual workspaces.
+
+### Features
+
+- **Browse Workspaces**: See all non-empty virtual workspaces with their saved windows
+- **Keyboard Navigation**: Use arrow keys or J/K to move between workspaces and windows
+- **Remove Windows**: Press Backspace, Delete, or X to remove a window from a workspace
+- **Native Appearance**: Floating HUD panel with macOS blur effect
+
+### Keyboard Shortcuts (in management panel)
+
+| Key | Action |
+|-----|--------|
+| `↑` / `K` | Move to previous item |
+| `↓` / `J` | Move to next item |
+| `Backspace` / `Delete` / `X` | Remove selected window from workspace |
+| `Escape` | Close panel and return to previous window |
+
 ## Settings
 
 Access Settings from the menu bar icon. You can configure:
@@ -299,6 +320,7 @@ MacTile is built with a clean separation of concerns:
   - `WindowManager.swift`: Accessibility API integration for window manipulation
   - `FocusManager.swift`: Application focus switching and window cycling via Accessibility API
   - `VirtualSpaceManager.swift`: Virtual spaces for saving/restoring window arrangements per monitor
+  - `VirtualSpaceManageOverlay.swift`: Floating panel for browsing and editing saved workspace contents
 
 ## Testing
 
