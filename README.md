@@ -47,6 +47,7 @@ A macOS window tiling application inspired by [gTile](https://github.com/gTile/g
 | `Option + Arrow keys` / `Option + H/J/K/L` | Move second corner (orange marker) |
 | `Enter` | Apply selection and resize window |
 | `Escape` | Cancel and close overlay |
+| Overlay shortcut (press while overlay is open) | Open workspace management panel |
 | `Space` | Cycle through grid sizes |
 | `Tab` | Switch to next monitor |
 | `Shift + Tab` | Switch to previous monitor |
@@ -211,7 +212,7 @@ When saving a virtual space, MacTile only captures windows that are meaningfully
 
 ## Workspace Management
 
-When the overlay is open, press Enter without modifying the grid selection to open the workspace management panel. This lets you browse and edit your saved virtual workspaces.
+When the overlay is open, press your overlay shortcut again (for example `Control+Option+G` twice) to open the workspace management panel. This lets you browse and edit your saved virtual workspaces.
 
 ### Features
 

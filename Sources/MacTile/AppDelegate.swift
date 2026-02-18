@@ -641,8 +641,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, VirtualSpaceManagerDelegate 
         }
 
         if overlayController?.window?.isVisible == true {
-            // Toggling off should return focus to the original window (same as Escape)
-            overlayController?.hideOverlay(cancelled: true)
+            overlayController?.handleRepeatedOverlayShortcut()
         } else {
             overlayController?.showOverlay()
         }

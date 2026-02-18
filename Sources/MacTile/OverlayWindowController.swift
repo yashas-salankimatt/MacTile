@@ -214,9 +214,6 @@ class OverlayWindowController: NSWindowController {
                 RealWindowManager.shared.activateWindow(windowToFocus)
             }
         }
-        gridView.onVirtualSpaceManageRequested = { [weak self] in
-            self?.showVirtualSpaceManageOverlay()
-        }
         contentView.addSubview(gridView)
         self.gridView = gridView
 
@@ -306,7 +303,6 @@ class OverlayWindowController: NSWindowController {
         // Set initial selection to match window position
         currentSelection = initialSelection
         gridView?.selection = currentSelection
-        gridView?.selectionHasBeenModified = false
         gridView?.needsDisplay = true
 
         // Start mouse monitoring for multi-monitor switching
@@ -324,6 +320,14 @@ class OverlayWindowController: NSWindowController {
         }
 
         targetWindow = nil
+    }
+
+    /// Handle pressing the overlay shortcut while the overlay is already visible.
+    /// This opens workspace management when available, otherwise it closes the overlay.
+    func handleRepeatedOverlayShortcut() {
+        if !showVirtualSpaceManageOverlay() {
+            hideOverlay(cancelled: true)
+        }
     }
 
     // MARK: - Multi-Monitor Support
@@ -567,27 +571,22 @@ class OverlayWindowController: NSWindowController {
         }
     }
 
-    /// Show the virtual workspace management overlay
-    /// Called when user presses Enter without modifying the grid selection
-    private func showVirtualSpaceManageOverlay() {
+    /// Show the virtual workspace management overlay.
+    /// - Returns: `true` if the management overlay was shown, otherwise `false`.
+    @discardableResult
+    private func showVirtualSpaceManageOverlay() -> Bool {
         guard SettingsManager.shared.settings.virtualSpacesEnabled,
               let screen = currentScreen else {
-            // Virtual spaces disabled - apply selection as normal
-            if let selection = gridView?.selection {
-                applySelection(selection)
-            }
-            return
+            print("[WorkspaceManage] Virtual spaces disabled or no active screen")
+            return false
         }
 
         let displayID = VirtualSpaceManager.displayID(for: screen)
         let spaces = SettingsManager.shared.settings.virtualSpaces.getNonEmptySpaces(displayID: displayID)
 
         if spaces.isEmpty {
-            // No workspaces to manage - apply selection as normal
-            if let selection = gridView?.selection {
-                applySelection(selection)
-            }
-            return
+            print("[WorkspaceManage] No saved workspaces to manage")
+            return false
         }
 
         // Capture target window before hiding (hideOverlay sets it to nil)
@@ -607,6 +606,7 @@ class OverlayWindowController: NSWindowController {
         }
         controller.show()
         workspaceManageController = controller
+        return true
     }
 
     /// Activate a focus preset - hide overlay and focus the target app
@@ -655,11 +655,6 @@ class GridOverlayView: NSView {
     var onVirtualSpaceRestore: ((Int) -> Void)?
     var onVirtualSpaceSave: ((Int) -> Void)?
     var onVirtualSpaceClear: ((Int) -> Void)?
-    var onVirtualSpaceManageRequested: (() -> Void)?
-
-    // Tracks whether the user has modified the selection since the overlay was shown.
-    // Used to detect "Enter without changes" → trigger workspace management overlay.
-    var selectionHasBeenModified = false
 
     // Configurable modifiers for overlay virtual space actions
     var overlayVirtualSpaceSaveModifiers: UInt = KeyboardShortcut.Modifiers.shift
@@ -984,7 +979,6 @@ class GridOverlayView: NSView {
                 print("Preset matched: \(preset.shortcutDisplayString) -> position \(cycleIndex + 1)/\(preset.cycleCount) for \(windowName): \(preset.positions[cycleIndex].coordinateString)")
                 let presetSelection = preset.toGridSelection(gridSize: gridSize, positionIndex: cycleIndex)
                 selection = presetSelection
-                selectionHasBeenModified = true
 
                 if preset.autoConfirm {
                     print("Auto-confirming preset")
@@ -1058,13 +1052,8 @@ class GridOverlayView: NSView {
 
         // Handle action keys
         if event.keyCode == keyboardSettings.applyKeyCode {
-            if !selectionHasBeenModified, let manageCallback = onVirtualSpaceManageRequested {
-                print("Apply key pressed without changes - requesting workspace management")
-                manageCallback()
-            } else {
-                print("Apply key pressed - confirming selection")
-                onSelectionConfirmed?(currentSelection)
-            }
+            print("Apply key pressed - confirming selection")
+            onSelectionConfirmed?(currentSelection)
             return
         }
 
@@ -1119,7 +1108,6 @@ class GridOverlayView: NSView {
                 )
             }
             selection = currentSelection
-            selectionHasBeenModified = true
             return
         }
 
@@ -1159,7 +1147,6 @@ class GridOverlayView: NSView {
         )
 
         onGridSizeChanged?(gridSize)
-        selectionHasBeenModified = true
         print("Grid size changed to: \(gridSize.cols)x\(gridSize.rows)")
     }
 
