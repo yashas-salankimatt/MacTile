@@ -8,4 +8,7 @@ DerivedData/
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
 .netrc
 .sidecar-*
+.sidecar/
 .td-root
+.todos/
+AGENTS.md
