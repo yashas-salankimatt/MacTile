@@ -2,6 +2,23 @@
 
 All notable changes to MacTile will be documented in this file.
 
+## [1.4.0] - 2026-02-18
+
+### Added
+
+- **Virtual Spaces Mode Toggle**: Added a new Spaces setting to choose between shared multi-monitor virtual spaces and per-monitor virtual spaces.
+
+### Changed
+
+- **Workspace Management Trigger**: Changed the management panel trigger while overlay is open from `Enter` to pressing the overlay shortcut a second time.
+- **Shared-Slot Behavior Consistency**: In shared mode, clear and rename now apply to all monitor entries in that virtual space number.
+
+### Fixed
+
+- **Multi-Monitor Save/Restore Robustness**: Saving and restoring virtual spaces now correctly handles connected monitor sets and preserves layouts for disconnected monitors.
+- **Mixed Monitor Topologies**: Restoring with fewer connected monitors now restores only connected layouts without deleting other saved monitor layouts.
+- **Active Space Tracking in Shared Mode**: Shared save/restore now marks all restored/saved monitor entries active, fixing stale active state handling.
+
 ## [1.3.0] - 2026-02-16
 
 ### Added

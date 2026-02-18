@@ -12,7 +12,7 @@ A macOS window tiling application inspired by [gTile](https://github.com/gTile/g
 - **Dual Global Hotkeys**: Primary (`Control+Option+G`) and secondary (`Command+Return`) shortcuts
 - **Tiling Presets**: Quick keyboard shortcuts to tile windows to predefined positions with cycling support
 - **Focus Presets**: Keyboard shortcuts to quickly focus applications and cycle through their windows
-- **Virtual Spaces**: Save and restore window arrangements per monitor with 10 spaces each
+- **Virtual Spaces**: Save and restore window arrangements with 10 slots, configurable as shared across monitors or per-monitor
 - **Workspace Management**: View and remove saved windows from virtual workspaces via an in-overlay panel
 - **Customizable Appearance**: Configure colors, opacity, and visual elements
 - **Settings Window**: Modern dark vibrancy sidebar navigation for configuring all options
@@ -152,11 +152,11 @@ Focus presets allow you to quickly switch to specific applications and cycle thr
 
 ## Virtual Spaces
 
-Virtual Spaces allow you to save and restore window arrangements on a per-monitor basis. Each monitor can have up to 10 virtual spaces (0-9), which serve as containers for window positions, sizes, and z-order (stacking order).
+Virtual Spaces allow you to save and restore window arrangements as multi-monitor workspace snapshots. Each space number (0-9) can store layouts for any monitors that were connected when the space was saved.
 
 ### Features
 
-- **10 Spaces Per Monitor**: Each monitor independently manages its own set of 10 virtual spaces (0-9)
+- **10 Space Slots (0-9)**: Use them as shared multi-monitor workspaces or independent per-monitor spaces
 - **Save Window Arrangements**: Capture the positions, sizes, and stacking order of visible windows
 - **Restore with Z-Order**: Windows are restored to their exact positions with correct stacking order
 - **Focus History**: After restore, Alt+Tab order matches the saved z-order (topmost window focused first)
@@ -176,22 +176,33 @@ Default keyboard shortcuts (modifier keys can be customized in Settings > Spaces
 
 ### How It Works
 
-1. **Saving a Space**: Press `Control+Option+Shift+0` (or 1-9) to save the current visible windows on the focused monitor to that virtual space. The space becomes "active" and its name appears in the menu bar.
+1. **Choose Mode**: In Settings → Spaces, enable or disable **Share Across Monitors**.
+   - On: each space number is a shared multi-monitor snapshot
+   - Off: each monitor has independent spaces for each number
 
-2. **Restoring a Space**: Press `Control+Option+0` (or 1-9) to restore windows from that virtual space. Windows are moved to their saved positions and sizes, and the stacking order is preserved.
+2. **Saving a Space**: Press `Control+Option+Shift+0` (or 1-9).
+   - Shared mode: saves all currently connected monitors into that slot, preserving saved layouts for disconnected monitors
+   - Per-monitor mode: saves only the current monitor’s slot
 
-3. **Active State**: A virtual space is "active" after being saved or restored. It becomes "inactive" when:
+3. **Restoring a Space**: Press `Control+Option+0` (or 1-9).
+   - Shared mode: restores saved layouts only for currently connected monitors
+   - Per-monitor mode: restores only the current monitor’s slot
+
+4. **Active State**: A virtual space is "active" after being saved or restored. It becomes "inactive" when:
    - A window not in that space gains focus
    - A window in that space gets resized or moved
 
-4. **Naming Spaces**: Press `Control+Option+Comma` when a space is active to give it a custom name (e.g., "Development", "Communication").
+5. **Naming Spaces**: Press `Control+Option+Comma` when a space is active to give it a custom name (e.g., "Development", "Communication").
+   - Shared mode renames the slot across all monitor entries
+   - Per-monitor mode renames only the current monitor’s slot
 
 ### Multi-Monitor Support
 
-Virtual spaces are tracked independently per monitor:
-- Each monitor has its own set of 10 virtual spaces (0-9)
-- Saving/restoring affects only the monitor containing the focused window
-- You can have different spaces active on different monitors simultaneously
+Virtual spaces support mixed monitor configurations:
+- Saving with one monitor stores that monitor’s layout for the space slot
+- In shared mode, saving with multiple monitors updates connected monitor layouts in the same slot
+- Restoring always applies only to monitors that are currently connected
+- Layouts for disconnected monitors remain stored and are not deleted
 
 ### Visibility Filtering
 
@@ -271,6 +282,7 @@ Access Settings from the menu bar icon. You can configure:
 
 ### Spaces (Virtual Spaces)
 - **Enable Virtual Spaces**: Toggle the entire virtual spaces feature on/off
+- **Share Across Monitors**: Choose shared multi-monitor spaces or per-monitor spaces
 - **Save Modifiers**: Customize the modifier keys for saving (default: Control+Option+Shift)
 - **Restore Modifiers**: Customize the modifier keys for restoring (default: Control+Option)
 - Press modifier keys + Space to record new modifiers
@@ -320,7 +332,7 @@ MacTile is built with a clean separation of concerns:
   - `SettingsManager.swift`: UserDefaults persistence for all settings
   - `WindowManager.swift`: Accessibility API integration for window manipulation
   - `FocusManager.swift`: Application focus switching and window cycling via Accessibility API
-  - `VirtualSpaceManager.swift`: Virtual spaces for saving/restoring window arrangements per monitor
+  - `VirtualSpaceManager.swift`: Virtual spaces for saving/restoring multi-monitor window arrangements
   - `VirtualSpaceManageOverlay.swift`: Floating panel for browsing and editing saved workspace contents
 
 ## Testing

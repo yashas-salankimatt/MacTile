@@ -249,6 +249,31 @@ final class VirtualSpacesStorageTests: XCTestCase {
         XCTAssertEqual(space2?.name, "Monitor2-Space1")
     }
 
+    func testGetSpacesForNumberAcrossMonitors() {
+        var storage = VirtualSpacesStorage()
+
+        storage.setSpace(VirtualSpace(number: 1, name: "Monitor1-Space1", displayID: 100), displayID: 100)
+        storage.setSpace(VirtualSpace(number: 1, name: "Monitor2-Space1", displayID: 200), displayID: 200)
+        storage.setSpace(VirtualSpace(number: 2, name: "OtherSlot", displayID: 100), displayID: 100)
+
+        let spaces = storage.getSpacesForNumber(1)
+        XCTAssertEqual(spaces.count, 2)
+        XCTAssertEqual(Set(spaces.map(\.displayID)), Set([100, 200]))
+        XCTAssertTrue(spaces.allSatisfy { $0.number == 1 })
+    }
+
+    func testGetDisplayIDsForSpaceNumber() {
+        var storage = VirtualSpacesStorage()
+
+        storage.setSpace(VirtualSpace(number: 3, name: "Monitor1-Space3", displayID: 100), displayID: 100)
+        storage.setSpace(VirtualSpace(number: 3, name: "Monitor2-Space3", displayID: 200), displayID: 200)
+        storage.setSpace(VirtualSpace(number: 4, name: "Monitor3-Space4", displayID: 300), displayID: 300)
+
+        XCTAssertEqual(storage.getDisplayIDsForSpaceNumber(3), [100, 200])
+        XCTAssertEqual(storage.getDisplayIDsForSpaceNumber(4), [300])
+        XCTAssertEqual(storage.getDisplayIDsForSpaceNumber(9), [])
+    }
+
     func testVirtualSpacesStorageCodable() throws {
         var storage = VirtualSpacesStorage()
 

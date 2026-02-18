@@ -64,6 +64,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     // Virtual Spaces tab
     private var virtualSpacesEnabledCheckbox: NSButton!
+    private var virtualSpacesSharedAcrossMonitorsCheckbox: NSButton!
     private var sketchybarIntegrationCheckbox: NSButton!
     private var saveModifiersField: NSTextField!
     private var saveModifiersRecordButton: NSButton!
@@ -1207,7 +1208,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         view.addSubview(headerLabel)
         y -= 18
 
-        let descLabel = createLabel("Save and restore window arrangements with keyboard shortcuts (10 spaces per monitor)", frame: NSRect(x: 20, y: y, width: 560, height: 16))
+        let descLabel = createLabel("Save and restore window arrangements with keyboard shortcuts", frame: NSRect(x: 20, y: y, width: 560, height: 16))
         descLabel.font = NSFont.systemFont(ofSize: 11)
         descLabel.textColor = .secondaryLabelColor
         view.addSubview(descLabel)
@@ -1217,6 +1218,21 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         virtualSpacesEnabledCheckbox = NSButton(checkboxWithTitle: "Enable Virtual Spaces", target: nil, action: nil)
         virtualSpacesEnabledCheckbox.frame = NSRect(x: 20, y: y, width: 250, height: 20)
         view.addSubview(virtualSpacesEnabledCheckbox)
+        y -= 24
+
+        // Shared/per-monitor mode checkbox
+        virtualSpacesSharedAcrossMonitorsCheckbox = NSButton(
+            checkboxWithTitle: "Share Virtual Spaces Across Monitors",
+            target: nil,
+            action: nil
+        )
+        virtualSpacesSharedAcrossMonitorsCheckbox.frame = NSRect(x: 20, y: y, width: 290, height: 20)
+        view.addSubview(virtualSpacesSharedAcrossMonitorsCheckbox)
+
+        let sharingHint = createLabel("On: one space number can store all connected monitors", frame: NSRect(x: 310, y: y, width: 280, height: 20))
+        sharingHint.font = NSFont.systemFont(ofSize: 11)
+        sharingHint.textColor = .secondaryLabelColor
+        view.addSubview(sharingHint)
         y -= 24
 
         // Sketchybar integration checkbox
@@ -1393,7 +1409,8 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
             "• Arrange windows, then press Save modifiers + number (0-9) to save",
             "• Press Restore modifiers + number to restore saved positions",
             "• Press Clear modifiers + number to unset/clear a saved space",
-            "• Each monitor has its own 10 spaces; only ≥40% visible windows are saved"
+            "• Shared mode: one space can include multiple monitors; per-monitor mode keeps them separate",
+            "• Only ≥40% visible windows are saved"
         ]
 
         for text in usageTexts {
@@ -1423,6 +1440,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         let defaults = MacTileSettings.default
 
         virtualSpacesEnabledCheckbox.state = defaults.virtualSpacesEnabled ? .on : .off
+        virtualSpacesSharedAcrossMonitorsCheckbox.state = SettingsManager.shared.defaultVirtualSpacesSharedAcrossMonitors ? .on : .off
         sketchybarIntegrationCheckbox.state = defaults.sketchybarIntegrationEnabled ? .on : .off
         recordedSaveModifiers = defaults.virtualSpaceSaveModifiers
         recordedRestoreModifiers = defaults.virtualSpaceRestoreModifiers
@@ -1849,6 +1867,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         let settings = SettingsManager.shared.settings
 
         virtualSpacesEnabledCheckbox.state = settings.virtualSpacesEnabled ? .on : .off
+        virtualSpacesSharedAcrossMonitorsCheckbox.state = SettingsManager.shared.virtualSpacesSharedAcrossMonitors ? .on : .off
         sketchybarIntegrationCheckbox.state = settings.sketchybarIntegrationEnabled ? .on : .off
         recordedSaveModifiers = settings.virtualSpaceSaveModifiers
         recordedRestoreModifiers = settings.virtualSpaceRestoreModifiers
@@ -1895,7 +1914,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         view.addSubview(nameLabel)
 
         // Version
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.5"
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.4.0"
         let versionLabel = NSTextField(frame: NSRect(x: 0, y: 215, width: view.bounds.width, height: 20))
         versionLabel.stringValue = "Version \(version)"
         versionLabel.font = NSFont.systemFont(ofSize: 13)
@@ -2492,6 +2511,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
         // Update virtual spaces settings
         SettingsManager.shared.updateVirtualSpacesEnabled(virtualSpacesEnabledCheckbox.state == .on)
+        SettingsManager.shared.updateVirtualSpacesSharedAcrossMonitors(virtualSpacesSharedAcrossMonitorsCheckbox.state == .on)
         SettingsManager.shared.updateSketchybarIntegration(sketchybarIntegrationCheckbox.state == .on)
         SettingsManager.shared.updateVirtualSpaceModifiers(
             save: recordedSaveModifiers,

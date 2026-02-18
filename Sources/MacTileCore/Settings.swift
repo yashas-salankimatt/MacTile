@@ -537,6 +537,28 @@ public struct VirtualSpacesStorage: Codable, Equatable {
         return getSpaces(displayID: displayID).filter { !$0.isEmpty }
     }
 
+    /// Get all spaces for a given space number across all monitors.
+    /// Useful for treating a space number as a multi-monitor workspace snapshot.
+    public func getSpacesForNumber(_ number: Int) -> [VirtualSpace] {
+        let numberKey = String(max(0, min(9, number)))
+        var spaces: [VirtualSpace] = []
+        for perMonitor in spacesByMonitor.values {
+            if let space = perMonitor[numberKey] {
+                spaces.append(space)
+            }
+        }
+        return spaces
+    }
+
+    /// Get all display IDs that have saved data for a given space number.
+    public func getDisplayIDsForSpaceNumber(_ number: Int) -> [UInt32] {
+        let numberKey = String(max(0, min(9, number)))
+        return spacesByMonitor.compactMap { (displayKey, perMonitor) in
+            guard perMonitor[numberKey] != nil else { return nil }
+            return UInt32(displayKey)
+        }.sorted()
+    }
+
     /// Clear (remove) a virtual space for a monitor
     public mutating func clearSpace(displayID: UInt32, number: Int) {
         let displayKey = String(displayID)

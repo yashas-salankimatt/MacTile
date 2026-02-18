@@ -259,8 +259,112 @@ class VirtualSpaceManager {
 
     // MARK: - Public API
 
-    /// Save the current monitor's visible windows to a virtual space
+    /// Save currently connected monitors' visible windows to a virtual space number.
+    /// Existing layouts for disconnected monitors are preserved.
     func saveToSpace(number: Int, forMonitor displayID: UInt32) {
+        guard SettingsManager.shared.virtualSpacesSharedAcrossMonitors else {
+            saveToSpacePerMonitor(number: number, displayID: displayID)
+            return
+        }
+
+        print("[VirtualSpaces] Saving space \(number) across connected monitors (trigger monitor: \(displayID))")
+
+        var storage = SettingsManager.shared.settings.virtualSpaces
+        let existingName = getExistingSpaceName(number: number, preferredDisplayID: displayID, storage: storage)
+
+        let connectedDisplayIDs = NSScreen.screens.map { Self.displayID(for: $0) }
+        let targetDisplayIDs = connectedDisplayIDs.isEmpty ? [displayID] : connectedDisplayIDs
+        var savedSpacesByDisplay: [UInt32: VirtualSpace] = [:]
+
+        for monitorID in targetDisplayIDs {
+            let windows = captureTopmostWindows(forMonitor: monitorID)
+            if debugLoggingEnabled {
+                print("[VirtualSpaces] Monitor \(monitorID): captured \(windows.count) windows")
+                for window in windows {
+                    let idString = window.windowID.map(String.init) ?? "nil"
+                    print("[VirtualSpaces]   Save window: \(window.appBundleID) '\(window.windowTitle)' id=\(idString) frame=\(window.frame)")
+                }
+            }
+
+            let space = VirtualSpace(
+                number: number,
+                name: existingName,
+                windows: windows,
+                displayID: monitorID
+            )
+            storage.setSpace(space, displayID: monitorID)
+            savedSpacesByDisplay[monitorID] = space
+        }
+
+        // Persist without re-registering hotkeys.
+        SettingsManager.shared.saveVirtualSpacesQuietly(storage)
+
+        // Mark all connected monitors in this shared slot as active.
+        // Activate trigger monitor last so menu/UI focus is consistent.
+        let activationOrder = targetDisplayIDs.sorted { lhs, rhs in
+            if lhs == displayID { return false }
+            if rhs == displayID { return true }
+            return lhs < rhs
+        }
+        for monitorID in activationOrder {
+            guard let activeSpace = savedSpacesByDisplay[monitorID] else { continue }
+            activateSpace(activeSpace, forMonitor: activeSpace.displayID)
+            notifySketchybar(action: .save, space: activeSpace, monitor: activeSpace.displayID)
+        }
+
+        print("[VirtualSpaces] Space \(number) saved for \(savedSpacesByDisplay.count) connected monitor(s)")
+    }
+
+    /// Restore windows from a virtual space number for all currently connected monitors
+    /// that have saved layouts.
+    func restoreFromSpace(number: Int, forMonitor displayID: UInt32) {
+        guard SettingsManager.shared.virtualSpacesSharedAcrossMonitors else {
+            restoreFromSpacePerMonitor(number: number, displayID: displayID)
+            return
+        }
+
+        print("[VirtualSpaces] Restoring space \(number) across connected monitors (trigger monitor: \(displayID))")
+
+        let storage = SettingsManager.shared.settings.virtualSpaces
+        let spacesForNumber = storage.getSpacesForNumber(number).filter { !$0.isEmpty }
+        guard !spacesForNumber.isEmpty else {
+            print("[VirtualSpaces] Space \(number) not found")
+            return
+        }
+
+        let connectedDisplayIDs = Set(NSScreen.screens.map { Self.displayID(for: $0) })
+        let restorableSpaces = spacesForNumber.filter { connectedDisplayIDs.contains($0.displayID) }
+        guard !restorableSpaces.isEmpty else {
+            print("[VirtualSpaces] Space \(number) has no saved layouts for currently connected monitors")
+            return
+        }
+
+        // Restore non-trigger monitors first, then trigger monitor last so focus ends there.
+        let sortedSpaces = restorableSpaces.sorted { lhs, rhs in
+            if lhs.displayID == displayID { return false }
+            if rhs.displayID == displayID { return true }
+            return lhs.displayID < rhs.displayID
+        }
+
+        for space in sortedSpaces {
+            print("[VirtualSpaces] Restoring monitor \(space.displayID) with \(space.windows.count) windows")
+            restoreWindows(from: space)
+        }
+
+        // Mark all restored monitors as active so tracking/deactivation remains accurate.
+        for space in sortedSpaces {
+            activateSpace(space, forMonitor: space.displayID)
+        }
+
+        // Notify sketchybar for restored monitors.
+        for space in restorableSpaces {
+            notifySketchybar(action: .restore, space: space, monitor: space.displayID)
+        }
+
+        print("[VirtualSpaces] Space \(number) restored on \(restorableSpaces.count) connected monitor(s)")
+    }
+
+    private func saveToSpacePerMonitor(number: Int, displayID: UInt32) {
         print("[VirtualSpaces] Saving to space \(number) for monitor \(displayID)")
 
         // Capture topmost windows on this monitor
@@ -273,10 +377,12 @@ class VirtualSpaceManager {
             }
         }
 
+        let existingName = SettingsManager.shared.settings.virtualSpaces.getSpace(displayID: displayID, number: number)?.name
+
         // Create the virtual space
         let space = VirtualSpace(
             number: number,
-            name: getExistingSpaceName(number: number, displayID: displayID),
+            name: existingName,
             windows: windows,
             displayID: displayID
         )
@@ -295,8 +401,7 @@ class VirtualSpaceManager {
         print("[VirtualSpaces] Space \(number) saved with \(windows.count) windows")
     }
 
-    /// Restore windows from a virtual space
-    func restoreFromSpace(number: Int, forMonitor displayID: UInt32) {
+    private func restoreFromSpacePerMonitor(number: Int, displayID: UInt32) {
         print("[VirtualSpaces] Restoring from space \(number) for monitor \(displayID)")
 
         guard let space = SettingsManager.shared.settings.virtualSpaces.getSpace(displayID: displayID, number: number) else {
@@ -321,8 +426,55 @@ class VirtualSpaceManager {
         print("[VirtualSpaces] Space \(number) restored")
     }
 
-    /// Clear (unset) a virtual space
+    /// Clear (unset) a virtual space for the specified monitor
     func clearSpace(number: Int, forMonitor displayID: UInt32) {
+        guard SettingsManager.shared.virtualSpacesSharedAcrossMonitors else {
+            clearSpacePerMonitor(number: number, displayID: displayID)
+            return
+        }
+
+        print("[VirtualSpaces] Clearing shared space \(number) across monitors (trigger monitor: \(displayID))")
+
+        var storage = SettingsManager.shared.settings.virtualSpaces
+        let monitorIDs = storage.getDisplayIDsForSpaceNumber(number)
+        guard !monitorIDs.isEmpty else {
+            print("[VirtualSpaces] Shared space \(number) not found")
+            return
+        }
+
+        let clearedSpaces = monitorIDs.compactMap { monitorID in
+            storage.getSpace(displayID: monitorID, number: number)
+        }
+
+        for monitorID in monitorIDs {
+            storage.clearSpace(displayID: monitorID, number: number)
+        }
+        SettingsManager.shared.saveVirtualSpacesQuietly(storage)
+
+        var deactivatedMonitors: [UInt32] = []
+        for monitorID in monitorIDs where activeSpaces[monitorID] == number {
+            activeSpaces.removeValue(forKey: monitorID)
+            activeSpaceWindows.removeValue(forKey: monitorID)
+            lastKnownFrames.removeValue(forKey: monitorID)
+            deactivatedMonitors.append(monitorID)
+        }
+
+        if activeSpaces.isEmpty {
+            stopMonitoring()
+        }
+
+        for monitorID in deactivatedMonitors {
+            delegate?.virtualSpaceDidBecomeInactive(forMonitor: monitorID)
+        }
+
+        for clearedSpace in clearedSpaces {
+            notifySketchybar(action: .clear, space: clearedSpace, monitor: clearedSpace.displayID)
+        }
+
+        print("[VirtualSpaces] Shared space \(number) cleared from \(monitorIDs.count) monitor(s)")
+    }
+
+    private func clearSpacePerMonitor(number: Int, displayID: UInt32) {
         print("[VirtualSpaces] Clearing space \(number) for monitor \(displayID)")
 
         // Check if this space was active
@@ -368,6 +520,11 @@ class VirtualSpaceManager {
 
     /// Rename a specific virtual space for a monitor (does not require it to be active)
     func renameSpace(number: Int, name: String, forMonitor displayID: UInt32) {
+        guard !SettingsManager.shared.virtualSpacesSharedAcrossMonitors else {
+            renameSharedSpace(number: number, name: name, triggerDisplayID: displayID)
+            return
+        }
+
         guard var space = SettingsManager.shared.settings.virtualSpaces.getSpace(displayID: displayID, number: number) else {
             print("[VirtualSpaces] Space \(number) not found for monitor \(displayID)")
             return
@@ -395,6 +552,40 @@ class VirtualSpaceManager {
         }
 
         print("[VirtualSpaces] Renamed space \(number) to '\(name)'")
+    }
+
+    private func renameSharedSpace(number: Int, name: String, triggerDisplayID: UInt32) {
+        var storage = SettingsManager.shared.settings.virtualSpaces
+        let monitorIDs = storage.getDisplayIDsForSpaceNumber(number)
+        guard !monitorIDs.isEmpty else {
+            print("[VirtualSpaces] Shared space \(number) not found")
+            return
+        }
+
+        let normalizedName = name.isEmpty ? nil : name
+        var renamedSpacesByDisplay: [UInt32: VirtualSpace] = [:]
+        for monitorID in monitorIDs {
+            guard var space = storage.getSpace(displayID: monitorID, number: number) else { continue }
+            space.name = normalizedName
+            storage.setSpace(space, displayID: monitorID)
+            renamedSpacesByDisplay[monitorID] = space
+        }
+        SettingsManager.shared.saveVirtualSpacesQuietly(storage)
+
+        // Notify delegate for any active monitor using this shared slot.
+        for (monitorID, activeNumber) in activeSpaces where activeNumber == number {
+            if let space = renamedSpacesByDisplay[monitorID] {
+                delegate?.virtualSpaceDidBecomeActive(space, forMonitor: monitorID)
+            }
+        }
+
+        // Notify sketchybar for all renamed monitor entries.
+        for monitorID in monitorIDs {
+            let space = renamedSpacesByDisplay[monitorID]
+            notifySketchybar(action: .activate, space: space, monitor: monitorID)
+        }
+
+        print("[VirtualSpaces] Renamed shared space \(number) to '\(name)' across \(monitorIDs.count) monitor(s)")
     }
 
     /// Get the active virtual space for a monitor
@@ -1280,9 +1471,15 @@ class VirtualSpaceManager {
         return results
     }
 
-    /// Get existing space name if any
-    private func getExistingSpaceName(number: Int, displayID: UInt32) -> String? {
-        return SettingsManager.shared.settings.virtualSpaces.getSpace(displayID: displayID, number: number)?.name
+    /// Get an existing space name for this number, preferring the trigger monitor.
+    private func getExistingSpaceName(number: Int, preferredDisplayID: UInt32, storage: VirtualSpacesStorage) -> String? {
+        if let preferred = storage.getSpace(displayID: preferredDisplayID, number: number)?.name,
+           !preferred.isEmpty {
+            return preferred
+        }
+        return storage.getSpacesForNumber(number)
+            .compactMap { $0.name }
+            .first { !$0.isEmpty }
     }
 
     /// Get NSScreen for a display ID

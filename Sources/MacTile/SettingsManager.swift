@@ -7,6 +7,8 @@ class SettingsManager {
 
     private let userDefaults = UserDefaults.standard
     private let settingsKey = "MacTileSettings"
+    private let virtualSpacesSharedAcrossMonitorsKey = "MacTileVirtualSpacesSharedAcrossMonitors"
+    private static let defaultVirtualSpacesSharedAcrossMonitors = true
 
     /// Backing storage for settings (allows modification without triggering didSet)
     private var _settings: MacTileSettings
@@ -23,6 +25,19 @@ class SettingsManager {
 
     private init() {
         _settings = Self.loadSettings() ?? .default
+    }
+
+    /// Whether virtual spaces use a shared space number across monitors.
+    /// When false, each monitor maintains independent spaces for each number.
+    var virtualSpacesSharedAcrossMonitors: Bool {
+        guard userDefaults.object(forKey: virtualSpacesSharedAcrossMonitorsKey) != nil else {
+            return Self.defaultVirtualSpacesSharedAcrossMonitors
+        }
+        return userDefaults.bool(forKey: virtualSpacesSharedAcrossMonitorsKey)
+    }
+
+    var defaultVirtualSpacesSharedAcrossMonitors: Bool {
+        Self.defaultVirtualSpacesSharedAcrossMonitors
     }
 
     // MARK: - Persistence
@@ -553,6 +568,11 @@ class SettingsManager {
         )
     }
 
+    func updateVirtualSpacesSharedAcrossMonitors(_ shared: Bool) {
+        userDefaults.set(shared, forKey: virtualSpacesSharedAcrossMonitorsKey)
+        NotificationCenter.default.post(name: .settingsDidChange, object: self)
+    }
+
     func updateVirtualSpaceModifiers(save: UInt, restore: UInt, clear: UInt) {
         settings = MacTileSettings(
             gridSizes: settings.gridSizes,
@@ -687,6 +707,7 @@ class SettingsManager {
 
     func resetToDefaults() {
         settings = .default
+        userDefaults.set(Self.defaultVirtualSpacesSharedAcrossMonitors, forKey: virtualSpacesSharedAcrossMonitorsKey)
     }
 }
 
