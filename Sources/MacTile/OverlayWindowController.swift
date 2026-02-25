@@ -138,6 +138,11 @@ class OverlayWindowController: NSWindowController {
             alpha: appearance.overlayOpacity
         )
         window?.backgroundColor = bgColor
+
+        // Refresh safe area insets since user insets may have changed
+        if let screen = currentScreen {
+            updateGridViewSafeAreaInsets(for: screen)
+        }
     }
 
     private func setupGridView() {
@@ -392,8 +397,8 @@ class OverlayWindowController: NSWindowController {
     }
 
     /// Calculate and set safe area insets for the grid view
-    /// These insets define the unusable area (menu bar, dock) so the grid
-    /// only covers the area where windows can actually be placed (visibleFrame)
+    /// These insets define the unusable area (menu bar, dock, plus user-configured insets)
+    /// so the grid only covers the area where windows can actually be placed
     private func updateGridViewSafeAreaInsets(for screen: NSScreen) {
         guard let gridView = gridView else { return }
 
@@ -401,21 +406,25 @@ class OverlayWindowController: NSWindowController {
         // But windows can only be placed in screen.visibleFrame (excludes menu bar, dock)
         // We need insets to offset the grid drawing and mouse handling
 
-        // Top inset: menu bar (and notch on newer MacBooks)
-        let topInset = screen.frame.maxY - screen.visibleFrame.maxY
+        // OS-level insets from menu bar, dock, notch
+        let osTopInset = screen.frame.maxY - screen.visibleFrame.maxY
+        let osBottomInset = screen.visibleFrame.minY - screen.frame.minY
+        let osLeftInset = screen.visibleFrame.minX - screen.frame.minX
+        let osRightInset = screen.frame.maxX - screen.visibleFrame.maxX
 
-        // Bottom inset: dock if positioned at bottom
-        let bottomInset = screen.visibleFrame.minY - screen.frame.minY
+        // User-configured insets (e.g. for sketchybar or other custom bars)
+        let userInsets = windowTiler.insets
 
-        // Left inset: dock if positioned on left
-        let leftInset = screen.visibleFrame.minX - screen.frame.minX
-
-        // Right inset: dock if positioned on right
-        let rightInset = screen.frame.maxX - screen.visibleFrame.maxX
+        let topInset = osTopInset + userInsets.top
+        let bottomInset = osBottomInset + userInsets.bottom
+        let leftInset = osLeftInset + userInsets.left
+        let rightInset = osRightInset + userInsets.right
 
         print("[SafeArea] Screen frame: \(screen.frame)")
         print("[SafeArea] Screen visibleFrame: \(screen.visibleFrame)")
-        print("[SafeArea] Insets - top: \(topInset), bottom: \(bottomInset), left: \(leftInset), right: \(rightInset)")
+        print("[SafeArea] OS insets - top: \(osTopInset), bottom: \(osBottomInset), left: \(osLeftInset), right: \(osRightInset)")
+        print("[SafeArea] User insets - top: \(userInsets.top), bottom: \(userInsets.bottom), left: \(userInsets.left), right: \(userInsets.right)")
+        print("[SafeArea] Total insets - top: \(topInset), bottom: \(bottomInset), left: \(leftInset), right: \(rightInset)")
 
         gridView.topSafeAreaInset = max(0, topInset)
         gridView.bottomSafeAreaInset = max(0, bottomInset)
@@ -855,7 +864,7 @@ class GridOverlayView: NSView {
             context.strokeEllipse(in: CGRect(x: targetX, y: targetY, width: 12, height: 12))
         }
 
-        // Draw grid size indicator
+        // Draw grid size indicator (positioned within grid bounds)
         let gridLabel = "\(gridSize.cols)x\(gridSize.rows)"
         let gridLabelAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedSystemFont(ofSize: 24, weight: .bold),
@@ -863,7 +872,7 @@ class GridOverlayView: NSView {
         ]
         let gridLabelSize = gridLabel.size(withAttributes: gridLabelAttrs)
         gridLabel.draw(
-            at: CGPoint(x: bounds.width - gridLabelSize.width - 20, y: 20),
+            at: CGPoint(x: bounds.width - rightSafeAreaInset - gridLabelSize.width - 20, y: bottomSafeAreaInset + 20),
             withAttributes: gridLabelAttrs
         )
 
@@ -876,7 +885,7 @@ class GridOverlayView: NSView {
             ]
             let monitorLabelSize = monitorLabel.size(withAttributes: monitorLabelAttrs)
             monitorLabel.draw(
-                at: CGPoint(x: bounds.width - monitorLabelSize.width - 20, y: 50),
+                at: CGPoint(x: bounds.width - rightSafeAreaInset - monitorLabelSize.width - 20, y: bottomSafeAreaInset + 50),
                 withAttributes: monitorLabelAttrs
             )
         }
@@ -902,7 +911,7 @@ class GridOverlayView: NSView {
                 .foregroundColor: NSColor.white
             ]
             let instrSize = instructions.size(withAttributes: instrAttrs)
-            let instrX = (bounds.width - instrSize.width) / 2
+            let instrX = leftSafeAreaInset + (bounds.width - leftSafeAreaInset - rightSafeAreaInset - instrSize.width) / 2
             // Account for menu bar / safe area at top
             let instrY = bounds.height - 40 - topSafeAreaInset
             instructions.draw(at: CGPoint(x: instrX, y: instrY), withAttributes: instrAttrs)
@@ -915,7 +924,7 @@ class GridOverlayView: NSView {
                 .font: NSFont.monospacedSystemFont(ofSize: 14, weight: .regular),
                 .foregroundColor: NSColor.white.withAlphaComponent(0.8)
             ]
-            selInfo.draw(at: CGPoint(x: 20, y: 20), withAttributes: selAttrs)
+            selInfo.draw(at: CGPoint(x: leftSafeAreaInset + 20, y: bottomSafeAreaInset + 20), withAttributes: selAttrs)
         }
     }
 

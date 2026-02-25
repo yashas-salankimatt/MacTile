@@ -431,6 +431,22 @@ final class EdgeInsetsTests: XCTestCase {
         XCTAssertEqual(insets.bottom, 30)
         XCTAssertEqual(insets.right, 40)
     }
+
+    func testEdgeInsetsNegativeClamping() {
+        let insets = EdgeInsets(top: -5, left: -10, bottom: -3, right: -1)
+        XCTAssertEqual(insets.top, 0)
+        XCTAssertEqual(insets.left, 0)
+        XCTAssertEqual(insets.bottom, 0)
+        XCTAssertEqual(insets.right, 0)
+    }
+
+    func testEdgeInsetsPartialNegativeClamping() {
+        let insets = EdgeInsets(top: 10, left: -5, bottom: 0, right: -20)
+        XCTAssertEqual(insets.top, 10)
+        XCTAssertEqual(insets.left, 0)
+        XCTAssertEqual(insets.bottom, 0)
+        XCTAssertEqual(insets.right, 0)
+    }
 }
 
 // MARK: - Visibility Calculator Tests

@@ -126,10 +126,10 @@ public struct EdgeInsets: Equatable {
     public let right: CGFloat
 
     public init(top: CGFloat, left: CGFloat, bottom: CGFloat, right: CGFloat) {
-        self.top = top
-        self.left = left
-        self.bottom = bottom
-        self.right = right
+        self.top = max(0, top)
+        self.left = max(0, left)
+        self.bottom = max(0, bottom)
+        self.right = max(0, right)
     }
 
     public static let zero = EdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
