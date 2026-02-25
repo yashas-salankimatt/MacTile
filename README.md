@@ -18,11 +18,22 @@ A macOS window tiling application inspired by [gTile](https://github.com/gTile/g
 - **Settings Window**: Modern dark vibrancy sidebar navigation for configuring all options
 - **Menu Bar App**: Runs in the menu bar with no dock icon
 
+## Installation
+
+1. **Download** the latest `.dmg` from the [Releases](https://github.com/yashas-salankimatt/MacTile/releases) page
+2. **Open the DMG** and drag `MacTile.app` to your Applications folder
+3. **Open MacTile** from Applications. Since MacTile is not signed with an Apple Developer ID, macOS will block it on first launch:
+   - Go to **System Settings > Privacy & Security**
+   - Scroll down to the **Security** section — you'll see a message that "MacTile was blocked"
+   - Click **Open Anyway** and confirm the dialog
+4. **Grant Accessibility Permission**: MacTile needs accessibility access to move and resize windows:
+   - Go to **System Settings > Privacy & Security > Accessibility**
+   - Click the **+** button and add MacTile (or toggle it on if it's already listed)
+
 ## Usage
 
 1. **Start MacTile**: Run the application, it will appear in your menu bar
-2. **Grant Accessibility Permission**: MacTile needs accessibility permissions to move and resize windows. Go to System Settings > Privacy & Security > Accessibility and enable MacTile
-3. **Open the Grid**: Press `Control+Option+G` (or `Command+Return`) or click the menu bar icon
+2. **Open the Grid**: Press `Control+Option+G` (or `Command+Return`) or click the menu bar icon
 4. **Select Region**:
    - Use arrow keys to pan the selection
    - Hold Shift + arrows to adjust the first corner (green marker)
