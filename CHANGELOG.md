@@ -2,6 +2,26 @@
 
 All notable changes to MacTile will be documented in this file.
 
+## [1.4.1] - 2026-02-25
+
+### Fixed
+
+- **Settings Apply Performance**: Settings are now saved in a single atomic update instead of 15+ individual writes, eliminating redundant hotkey re-registration and intermediate state flicker
+- **Memory Leak in Preset Rows**: Fixed retain cycle in tiling preset delete handler that prevented row views from being deallocated
+- **Event Monitor Cleanup**: Recording keyboard shortcuts in preset/focus rows now properly cancels on row deletion, reset, and window close — prevents leaked NSEvent monitors
+- **Overlay Modifier Apply/Cancel Consistency**: Overlay virtual space modifier changes now only persist when clicking Apply (previously saved immediately during recording)
+- **Reset Confirmation Dialogs**: All per-tab reset buttons now show a confirmation dialog before reverting to defaults
+- **Safe Screen Access**: Replaced unsafe `NSScreen.screens[0]` with safe `.first` access throughout, preventing potential crashes on headless/disconnected displays
+- **Settings Corruption Alert**: If stored settings fail to decode, the user now sees an alert instead of silently falling back to defaults
+- **Async Window Tiling**: Window frame operations in the overlay are now dispatched off the main thread, preventing brief UI freezes during tiling
+
+### Improved
+
+- **Settings Window Layout**: Removed misaligned card backgrounds from all settings tabs for a cleaner appearance
+- **Spaces Tab Scrolling**: Spaces tab content is now in a scroll view, ensuring all settings and usage instructions are accessible
+- **Presets Tab Layout**: Help text and buttons no longer overlap; coordinates field is wider to show full cycle position strings
+- **Scroll View Resizing**: Settings scroll views now properly resize when the window dimensions change
+
 ## [1.4.0] - 2026-02-18
 
 ### Added

@@ -38,7 +38,7 @@ class RealWindowManager: WindowManagerProtocol {
 
     /// Get the primary screen height for AX coordinate conversion
     /// The AX coordinate system uses the primary display (with menu bar) as reference
-    /// This is always NSScreen.screens[0] according to Apple documentation
+    /// This is always NSScreen.screens.first according to Apple documentation
     private var primaryScreenHeight: CGFloat {
         return NSScreen.screens.first?.frame.height ?? 0
     }
@@ -57,6 +57,7 @@ class RealWindowManager: WindowManagerProtocol {
             return nil
         }
 
+        // CFTypeRef is always castable to AXUIElement (both are CoreFoundation types)
         let axWindow = windowElement as! AXUIElement
         return createWindowInfo(from: axWindow, pid: frontApp.processIdentifier)
     }

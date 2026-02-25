@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import MacTileCore
 
 /// Manages persistence and access to MacTile settings
@@ -52,6 +52,15 @@ class SettingsManager {
             return try decoder.decode(MacTileSettings.self, from: data)
         } catch {
             print("Failed to decode settings: \(error)")
+            // Show alert on the main thread so the user knows settings were reset
+            DispatchQueue.main.async {
+                let alert = NSAlert()
+                alert.messageText = "Settings Could Not Be Loaded"
+                alert.informativeText = "Your MacTile settings appear to be corrupted and have been reset to defaults. You may need to reconfigure your preferences."
+                alert.alertStyle = .warning
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
+            }
             return nil
         }
     }

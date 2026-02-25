@@ -60,7 +60,8 @@ class OverlayWindowController: NSWindowController {
         windowTiler.insets = settings.insets
 
         // Create a panel instead of window - panels can receive keyboard input as floating windows
-        let screen = NSScreen.main ?? NSScreen.screens[0]
+        let screen = NSScreen.main ?? NSScreen.screens.first ?? NSScreen()
+
         let panel = KeyablePanel(
             contentRect: screen.frame,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -544,21 +545,33 @@ class OverlayWindowController: NSWindowController {
             print("[ApplySelection] Calculated target frame: \(targetFrame)")
             print("[ApplySelection] Target window: \(targetWindow.title) (current frame: \(targetWindow.frame))")
 
-            let success = RealWindowManager.shared.setWindowFrame(targetWindow, frame: targetFrame)
-            if success {
-                print("[ApplySelection] ✓ Successfully tiled window: \(targetWindow.title)")
-            } else {
-                print("[ApplySelection] ✗ Failed to tile window: \(targetWindow.title)")
-            }
-            print("[ApplySelection] ═══════════════════════════════════════════════")
+            // Dispatch tiling to background to avoid blocking UI with AX API delays
+            DispatchQueue.global(qos: .userInitiated).async {
+                let success = RealWindowManager.shared.setWindowFrame(targetWindow, frame: targetFrame)
+                if success {
+                    print("[ApplySelection] ✓ Successfully tiled window: \(targetWindow.title)")
+                } else {
+                    print("[ApplySelection] ✗ Failed to tile window: \(targetWindow.title)")
+                }
+                print("[ApplySelection] ═══════════════════════════════════════════════")
 
-            // Return focus to the tiled window
-            RealWindowManager.shared.activateWindow(targetWindow)
+                // Return focus to the tiled window
+                DispatchQueue.main.async {
+                    RealWindowManager.shared.activateWindow(targetWindow)
+                }
+            }
         } else {
             print("No target window captured - trying to get current focused window")
-            let success = windowTiler.tileFocusedWindow(to: selection, gridSize: gridSize)
-            if !success {
-                print("Failed to tile window - check accessibility permissions")
+            let tiler = self.windowTiler
+            let sel = selection
+            let gs = gridSize
+            DispatchQueue.global(qos: .userInitiated).async {
+                let success = tiler.tileFocusedWindow(to: sel, gridSize: gs)
+                if success {
+                    print("[ApplySelection] ✓ Tiled focused window via fallback path")
+                } else {
+                    print("Failed to tile window - check accessibility permissions")
+                }
             }
         }
 

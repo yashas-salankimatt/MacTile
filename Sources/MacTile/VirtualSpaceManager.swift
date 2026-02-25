@@ -250,11 +250,11 @@ class VirtualSpaceManager {
     /// This is used for coordinate conversions between:
     /// - CGWindowList/AX API (top-left origin)
     /// - NSScreen/Cocoa (bottom-left origin)
-    /// NSScreen.screens[0] is documented to always be the screen containing the menu bar.
+    /// NSScreen.screens.first is documented to always be the screen containing the menu bar.
     private var primaryScreenHeight: CGFloat {
-        // NSScreen.screens[0] is always the primary (menu bar) screen per Apple docs
-        guard !NSScreen.screens.isEmpty else { return 0 }
-        return NSScreen.screens[0].frame.height
+        // NSScreen.screens.first is always the primary (menu bar) screen per Apple docs
+        guard let primaryScreen = NSScreen.screens.first else { return 0 }
+        return primaryScreen.frame.height
     }
 
     // MARK: - Public API
@@ -1508,7 +1508,7 @@ class VirtualSpaceManager {
             }
         }
         // Default to main screen
-        return displayID(for: NSScreen.main ?? NSScreen.screens[0])
+        return displayID(for: NSScreen.main ?? NSScreen.screens.first ?? NSScreen())
     }
 }
 

@@ -517,8 +517,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, VirtualSpaceManagerDelegate 
         }
 
         // Fall back to main screen
-        guard let mainScreen = NSScreen.main else {
-            return VirtualSpaceManager.displayID(for: NSScreen.screens[0])
+        guard let mainScreen = NSScreen.main ?? NSScreen.screens.first else {
+            return CGDirectDisplayID(0)
         }
         return VirtualSpaceManager.displayID(for: mainScreen)
     }

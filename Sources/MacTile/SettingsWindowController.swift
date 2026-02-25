@@ -91,6 +91,8 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private var isRecordingOverlayClearModifiers = false
     private var overlaySaveModifiersMonitor: Any?
     private var overlayClearModifiersMonitor: Any?
+    // These are only accessed from the main thread: NSEvent local monitors
+    // deliver on the main run loop, and applySettings() is a button action.
     private var recordedOverlaySaveModifiers: UInt = 0
     private var recordedOverlayClearModifiers: UInt = 0
 
@@ -199,6 +201,14 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
             overlayClearModifiersMonitor = nil
         }
         isRecordingOverlayClearModifiers = false
+
+        // Clean up any active recordings in preset rows
+        for row in presetRows {
+            row.cancelRecordingIfActive()
+        }
+        for row in focusPresetRows {
+            row.cancelRecordingIfActive()
+        }
     }
 
     /// Sets up the main application menu with Edit menu for copy/paste support
@@ -392,14 +402,19 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
-    // MARK: - Card Section Helper
+    // MARK: - Helpers
 
-    private func addCardBackground(to view: NSView, frame: NSRect) {
-        let card = NSView(frame: frame)
-        card.wantsLayer = true
-        card.layer?.backgroundColor = NSColor(white: 1.0, alpha: 0.04).cgColor
-        card.layer?.cornerRadius = 8
-        view.addSubview(card, positioned: .below, relativeTo: nil)
+    /// Shows a confirmation alert before resetting settings. Calls the handler only if user confirms.
+    private func confirmReset(tabName: String, action: @escaping () -> Void) {
+        let alert = NSAlert()
+        alert.messageText = "Reset \(tabName)?"
+        alert.informativeText = "This will revert all \(tabName.lowercased()) to their default values. You still need to click Apply to save."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Reset")
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn {
+            action()
+        }
     }
 
     @objc private func cancelSettings() {
@@ -535,14 +550,15 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         resetButton.action = #selector(resetGeneralSettings)
         view.addSubview(resetButton)
 
-        // Card backgrounds for visual grouping
-        addCardBackground(to: view, frame: NSRect(x: 8, y: 240, width: 584, height: 200))
-        addCardBackground(to: view, frame: NSRect(x: 8, y: 48, width: 584, height: 185))
 
         return view
     }
 
     @objc private func resetGeneralSettings() {
+        confirmReset(tabName: "General Settings") { [weak self] in self?.doResetGeneralSettings() }
+    }
+
+    private func doResetGeneralSettings() {
         let defaults = MacTileSettings.default
 
         // Reset grid sizes
@@ -705,14 +721,15 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         resetButton.action = #selector(resetShortcutSettings)
         view.addSubview(resetButton)
 
-        // Card backgrounds
-        addCardBackground(to: view, frame: NSRect(x: 8, y: 290, width: 584, height: 150))
-        addCardBackground(to: view, frame: NSRect(x: 8, y: 22, width: 584, height: 262))
 
         return view
     }
 
     @objc private func resetShortcutSettings() {
+        confirmReset(tabName: "Shortcut Settings") { [weak self] in self?.doResetShortcutSettings() }
+    }
+
+    private func doResetShortcutSettings() {
         let defaults = MacTileSettings.default
 
         // Reset primary shortcut
@@ -875,14 +892,15 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         resetButton.action = #selector(resetAppearanceSettings)
         view.addSubview(resetButton)
 
-        // Card backgrounds
-        addCardBackground(to: view, frame: NSRect(x: 8, y: 270, width: 584, height: 170))
-        addCardBackground(to: view, frame: NSRect(x: 8, y: 118, width: 584, height: 145))
 
         return view
     }
 
     @objc private func resetAppearanceSettings() {
+        confirmReset(tabName: "Appearance Settings") { [weak self] in self?.doResetAppearanceSettings() }
+    }
+
+    private func doResetAppearanceSettings() {
         let defaults = AppearanceSettings.default
 
         overlayColorWell.color = defaults.overlayBackgroundColor.nsColor
@@ -927,50 +945,51 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         // Column headers aligned with single-row layout
         let headerOffset: CGFloat = 12  // scroll view x (10) + border inset (2)
 
-        let shortcutLabel = createLabel("Shortcut", frame: NSRect(x: headerOffset + 5, y: y, width: 100, height: 16))
+        let shortcutLabel = createLabel("Shortcut", frame: NSRect(x: headerOffset + 5, y: y, width: 65, height: 16))
         shortcutLabel.font = NSFont.boldSystemFont(ofSize: 11)
         view.addSubview(shortcutLabel)
 
-        let coordLabel = createLabel("Positions (| = cycle)", frame: NSRect(x: headerOffset + 110, y: y, width: 160, height: 16))
+        let coordLabel = createLabel("Positions (| = cycle)", frame: NSRect(x: headerOffset + 75, y: y, width: 200, height: 16))
         coordLabel.font = NSFont.boldSystemFont(ofSize: 11)
         view.addSubview(coordLabel)
 
-        let cycleLabel = createLabel("Cycle ms", frame: NSRect(x: headerOffset + 345, y: y, width: 70, height: 16))
+        let cycleLabel = createLabel("Cycle ms", frame: NSRect(x: headerOffset + 375, y: y, width: 70, height: 16))
         cycleLabel.font = NSFont.boldSystemFont(ofSize: 11)
         view.addSubview(cycleLabel)
 
-        let autoLabel = createLabel("Auto", frame: NSRect(x: headerOffset + 430, y: y, width: 40, height: 16))
+        let autoLabel = createLabel("Auto", frame: NSRect(x: headerOffset + 460, y: y, width: 40, height: 16))
         autoLabel.font = NSFont.boldSystemFont(ofSize: 11)
         view.addSubview(autoLabel)
         y -= 18  // header height (16) + small gap (2)
 
         // Scroll view for presets
-        presetsScrollView = NSScrollView(frame: NSRect(x: 10, y: 60, width: 580, height: y - 60))
+        presetsScrollView = NSScrollView(frame: NSRect(x: 10, y: 80, width: 580, height: y - 80))
         presetsScrollView.hasVerticalScroller = true
         presetsScrollView.hasHorizontalScroller = false
         presetsScrollView.autohidesScrollers = true
         presetsScrollView.borderType = .bezelBorder
+        presetsScrollView.autoresizingMask = [.width, .height]
 
         presetsContainer = NSView(frame: NSRect(x: 0, y: 0, width: 560, height: 300))
         presetsScrollView.documentView = presetsContainer
         view.addSubview(presetsScrollView)
 
+        // Help text on its own line
+        let helpLabel = createLabel("Format: (x1,y1);(x2,y2) | Use | to add cycle positions. Press key again within timeout to cycle.", frame: NSRect(x: 20, y: 52, width: 560, height: 16))
+        helpLabel.font = NSFont.systemFont(ofSize: 9)
+        helpLabel.textColor = .secondaryLabelColor
+        view.addSubview(helpLabel)
+
         // Add preset button
-        addPresetButton = NSButton(frame: NSRect(x: 20, y: 25, width: 120, height: 24))
+        addPresetButton = NSButton(frame: NSRect(x: 20, y: 22, width: 120, height: 24))
         addPresetButton.title = "Add Preset"
         addPresetButton.bezelStyle = .rounded
         addPresetButton.target = self
         addPresetButton.action = #selector(addPreset)
         view.addSubview(addPresetButton)
 
-        // Help text
-        let helpLabel = createLabel("Format: (x1,y1);(x2,y2) | Use | to add cycle positions. Press key again within timeout to cycle.", frame: NSRect(x: 150, y: 27, width: 360, height: 16))
-        helpLabel.font = NSFont.systemFont(ofSize: 9)
-        helpLabel.textColor = .secondaryLabelColor
-        view.addSubview(helpLabel)
-
         // Reset button for this tab
-        let resetButton = NSButton(frame: NSRect(x: 450, y: 25, width: 130, height: 24))
+        let resetButton = NSButton(frame: NSRect(x: 450, y: 22, width: 130, height: 24))
         resetButton.title = "Reset to Defaults"
         resetButton.bezelStyle = .rounded
         resetButton.target = self
@@ -981,8 +1000,13 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     @objc private func resetPresetsSettings() {
-        // Clear existing rows
+        confirmReset(tabName: "Preset Settings") { [weak self] in self?.doResetPresetsSettings() }
+    }
+
+    private func doResetPresetsSettings() {
+        // Cancel any active recordings and clear existing rows
         for row in presetRows {
+            row.cancelRecordingIfActive()
             row.removeFromSuperview()
         }
         presetRows.removeAll()
@@ -1021,8 +1045,9 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         let y = CGFloat(presetRows.count) * rowHeight
 
         let row = PresetRowView(frame: NSRect(x: 0, y: y, width: 560, height: rowHeight), preset: preset)
-        row.onDelete = { [weak self] in
-            self?.removePresetRow(row)
+        row.onDelete = { [weak self, weak row] in
+            guard let self = self, let row = row else { return }
+            self.removePresetRow(row)
         }
         presetsContainer.addSubview(row)
         presetRows.append(row)
@@ -1030,6 +1055,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     private func removePresetRow(_ row: PresetRowView) {
         guard let index = presetRows.firstIndex(of: row) else { return }
+        row.cancelRecordingIfActive()
         row.removeFromSuperview()
         presetRows.remove(at: index)
 
@@ -1103,6 +1129,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         focusPresetsScrollView.hasHorizontalScroller = false
         focusPresetsScrollView.autohidesScrollers = true
         focusPresetsScrollView.borderType = .bezelBorder
+        focusPresetsScrollView.autoresizingMask = [.width, .height]
 
         focusPresetsContainer = NSView(frame: NSRect(x: 0, y: 0, width: 560, height: 300))
         focusPresetsScrollView.documentView = focusPresetsContainer
@@ -1128,8 +1155,13 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     @objc private func resetFocusSettings() {
-        // Clear all focus presets (default is empty)
+        confirmReset(tabName: "Focus Settings") { [weak self] in self?.doResetFocusSettings() }
+    }
+
+    private func doResetFocusSettings() {
+        // Cancel any active recordings and clear all focus presets (default is empty)
         for row in focusPresetRows {
+            row.cancelRecordingIfActive()
             row.removeFromSuperview()
         }
         focusPresetRows.removeAll()
@@ -1160,6 +1192,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
             guard let self = self, let row = row else { return }
             if let index = self.focusPresetRows.firstIndex(where: { $0 === row }) {
                 self.focusPresetRows.remove(at: index)
+                row.cancelRecordingIfActive()
                 row.removeFromSuperview()
                 self.updateFocusPresetsContainerHeight()
             }
@@ -1171,8 +1204,9 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private func loadFocusPresets() {
         let settings = SettingsManager.shared.settings
 
-        // Clear existing rows
+        // Cancel recordings and clear existing rows
         for row in focusPresetRows {
+            row.cancelRecordingIfActive()
             row.removeFromSuperview()
         }
         focusPresetRows.removeAll()
@@ -1200,24 +1234,40 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private func createVirtualSpacesContent() -> NSView {
         let view = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 460))
 
-        var y: CGFloat = 420
+        // Use a scroll view so all content is accessible without clipping
+        // The page starts at 460px but gets resized to ~510px; .height mask
+        // ensures the scroll view grows with the page so all content is visible.
+        let contentHeight: CGFloat = 480
+        let spacesScrollView = NSScrollView(frame: NSRect(x: 0, y: 30, width: 600, height: 430))
+        spacesScrollView.hasVerticalScroller = true
+        spacesScrollView.hasHorizontalScroller = false
+        spacesScrollView.autohidesScrollers = true
+        spacesScrollView.borderType = .noBorder
+        spacesScrollView.drawsBackground = false
+        spacesScrollView.autoresizingMask = [.width, .height]
+
+        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: contentHeight))
+        spacesScrollView.documentView = contentView
+        view.addSubview(spacesScrollView)
+
+        var y: CGFloat = contentHeight - 20
 
         // Header
         let headerLabel = createLabel("Virtual Spaces", frame: NSRect(x: 20, y: y, width: 300, height: 20))
         headerLabel.font = NSFont.boldSystemFont(ofSize: 14)
-        view.addSubview(headerLabel)
+        contentView.addSubview(headerLabel)
         y -= 18
 
         let descLabel = createLabel("Save and restore window arrangements with keyboard shortcuts", frame: NSRect(x: 20, y: y, width: 560, height: 16))
         descLabel.font = NSFont.systemFont(ofSize: 11)
         descLabel.textColor = .secondaryLabelColor
-        view.addSubview(descLabel)
+        contentView.addSubview(descLabel)
         y -= 28
 
         // Enable/Disable checkbox
         virtualSpacesEnabledCheckbox = NSButton(checkboxWithTitle: "Enable Virtual Spaces", target: nil, action: nil)
         virtualSpacesEnabledCheckbox.frame = NSRect(x: 20, y: y, width: 250, height: 20)
-        view.addSubview(virtualSpacesEnabledCheckbox)
+        contentView.addSubview(virtualSpacesEnabledCheckbox)
         y -= 24
 
         // Shared/per-monitor mode checkbox
@@ -1227,182 +1277,182 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
             action: nil
         )
         virtualSpacesSharedAcrossMonitorsCheckbox.frame = NSRect(x: 20, y: y, width: 290, height: 20)
-        view.addSubview(virtualSpacesSharedAcrossMonitorsCheckbox)
+        contentView.addSubview(virtualSpacesSharedAcrossMonitorsCheckbox)
 
         let sharingHint = createLabel("On: one space number can store all connected monitors", frame: NSRect(x: 310, y: y, width: 280, height: 20))
         sharingHint.font = NSFont.systemFont(ofSize: 11)
         sharingHint.textColor = .secondaryLabelColor
-        view.addSubview(sharingHint)
+        contentView.addSubview(sharingHint)
         y -= 24
 
         // Sketchybar integration checkbox
         sketchybarIntegrationCheckbox = NSButton(checkboxWithTitle: "Enable Sketchybar Integration", target: self, action: #selector(toggleSketchybarIntegration))
         sketchybarIntegrationCheckbox.frame = NSRect(x: 20, y: y, width: 250, height: 20)
-        view.addSubview(sketchybarIntegrationCheckbox)
+        contentView.addSubview(sketchybarIntegrationCheckbox)
 
         let sketchybarHint = createLabel("Show virtual space indicators in sketchybar", frame: NSRect(x: 270, y: y, width: 300, height: 20))
         sketchybarHint.font = NSFont.systemFont(ofSize: 11)
         sketchybarHint.textColor = .secondaryLabelColor
-        view.addSubview(sketchybarHint)
+        contentView.addSubview(sketchybarHint)
         y -= 32
 
         // Save Modifiers Section
         let saveModifiersLabel = createLabel("Save Modifiers:", frame: NSRect(x: 20, y: y, width: 120, height: 20))
         saveModifiersLabel.font = NSFont.boldSystemFont(ofSize: 13)
-        view.addSubview(saveModifiersLabel)
+        contentView.addSubview(saveModifiersLabel)
 
         saveModifiersField = NSTextField(frame: NSRect(x: 140, y: y - 2, width: 100, height: 24))
         saveModifiersField.isEditable = false
         saveModifiersField.isSelectable = false
         saveModifiersField.alignment = .center
         saveModifiersField.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .medium)
-        view.addSubview(saveModifiersField)
+        contentView.addSubview(saveModifiersField)
 
         saveModifiersRecordButton = NSButton(frame: NSRect(x: 250, y: y - 2, width: 80, height: 24))
         saveModifiersRecordButton.title = "Record"
         saveModifiersRecordButton.bezelStyle = .rounded
         saveModifiersRecordButton.target = self
         saveModifiersRecordButton.action = #selector(toggleRecordSaveModifiers)
-        view.addSubview(saveModifiersRecordButton)
+        contentView.addSubview(saveModifiersRecordButton)
 
         let saveShortcutHint = createLabel("+ 0-9 to save", frame: NSRect(x: 340, y: y, width: 100, height: 20))
         saveShortcutHint.font = NSFont.systemFont(ofSize: 11)
         saveShortcutHint.textColor = .secondaryLabelColor
-        view.addSubview(saveShortcutHint)
+        contentView.addSubview(saveShortcutHint)
         y -= 28
 
         // Restore Modifiers Section
         let restoreModifiersLabel = createLabel("Restore Modifiers:", frame: NSRect(x: 20, y: y, width: 120, height: 20))
         restoreModifiersLabel.font = NSFont.boldSystemFont(ofSize: 13)
-        view.addSubview(restoreModifiersLabel)
+        contentView.addSubview(restoreModifiersLabel)
 
         restoreModifiersField = NSTextField(frame: NSRect(x: 140, y: y - 2, width: 100, height: 24))
         restoreModifiersField.isEditable = false
         restoreModifiersField.isSelectable = false
         restoreModifiersField.alignment = .center
         restoreModifiersField.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .medium)
-        view.addSubview(restoreModifiersField)
+        contentView.addSubview(restoreModifiersField)
 
         restoreModifiersRecordButton = NSButton(frame: NSRect(x: 250, y: y - 2, width: 80, height: 24))
         restoreModifiersRecordButton.title = "Record"
         restoreModifiersRecordButton.bezelStyle = .rounded
         restoreModifiersRecordButton.target = self
         restoreModifiersRecordButton.action = #selector(toggleRecordRestoreModifiers)
-        view.addSubview(restoreModifiersRecordButton)
+        contentView.addSubview(restoreModifiersRecordButton)
 
         let restoreShortcutHint = createLabel("+ 0-9 to restore", frame: NSRect(x: 340, y: y, width: 120, height: 20))
         restoreShortcutHint.font = NSFont.systemFont(ofSize: 11)
         restoreShortcutHint.textColor = .secondaryLabelColor
-        view.addSubview(restoreShortcutHint)
+        contentView.addSubview(restoreShortcutHint)
         y -= 28
 
         // Clear Modifiers Section
         let clearModifiersLabel = createLabel("Clear Modifiers:", frame: NSRect(x: 20, y: y, width: 120, height: 20))
         clearModifiersLabel.font = NSFont.boldSystemFont(ofSize: 13)
-        view.addSubview(clearModifiersLabel)
+        contentView.addSubview(clearModifiersLabel)
 
         clearModifiersField = NSTextField(frame: NSRect(x: 140, y: y - 2, width: 100, height: 24))
         clearModifiersField.isEditable = false
         clearModifiersField.isSelectable = false
         clearModifiersField.alignment = .center
         clearModifiersField.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .medium)
-        view.addSubview(clearModifiersField)
+        contentView.addSubview(clearModifiersField)
 
         clearModifiersRecordButton = NSButton(frame: NSRect(x: 250, y: y - 2, width: 80, height: 24))
         clearModifiersRecordButton.title = "Record"
         clearModifiersRecordButton.bezelStyle = .rounded
         clearModifiersRecordButton.target = self
         clearModifiersRecordButton.action = #selector(toggleRecordClearModifiers)
-        view.addSubview(clearModifiersRecordButton)
+        contentView.addSubview(clearModifiersRecordButton)
 
         let clearShortcutHint = createLabel("+ 0-9 to clear/unset", frame: NSRect(x: 340, y: y, width: 140, height: 20))
         clearShortcutHint.font = NSFont.systemFont(ofSize: 11)
         clearShortcutHint.textColor = .secondaryLabelColor
-        view.addSubview(clearShortcutHint)
+        contentView.addSubview(clearShortcutHint)
         y -= 20
 
         let recordHint = createLabel("Press modifier keys + Space to record new modifiers", frame: NSRect(x: 20, y: y, width: 400, height: 16))
         recordHint.font = NSFont.systemFont(ofSize: 11)
         recordHint.textColor = .tertiaryLabelColor
-        view.addSubview(recordHint)
+        contentView.addSubview(recordHint)
         y -= 28
 
         // Overlay Modifiers Section (when overlay is active)
         let overlayModifiersHeader = createLabel("Overlay Mode Modifiers:", frame: NSRect(x: 20, y: y, width: 200, height: 20))
         overlayModifiersHeader.font = NSFont.boldSystemFont(ofSize: 13)
-        view.addSubview(overlayModifiersHeader)
+        contentView.addSubview(overlayModifiersHeader)
 
         let overlayModifiersHint = createLabel("(while overlay is visible)", frame: NSRect(x: 220, y: y, width: 200, height: 20))
         overlayModifiersHint.font = NSFont.systemFont(ofSize: 11)
         overlayModifiersHint.textColor = .secondaryLabelColor
-        view.addSubview(overlayModifiersHint)
+        contentView.addSubview(overlayModifiersHint)
         y -= 28
 
         // Overlay Save Modifiers
         let overlaySaveLabel = createLabel("Save:", frame: NSRect(x: 40, y: y, width: 80, height: 20))
         overlaySaveLabel.font = NSFont.systemFont(ofSize: 13)
-        view.addSubview(overlaySaveLabel)
+        contentView.addSubview(overlaySaveLabel)
 
         overlaySaveModifiersField = NSTextField(frame: NSRect(x: 120, y: y - 2, width: 100, height: 24))
         overlaySaveModifiersField.isEditable = false
         overlaySaveModifiersField.isSelectable = false
         overlaySaveModifiersField.alignment = .center
         overlaySaveModifiersField.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .medium)
-        view.addSubview(overlaySaveModifiersField)
+        contentView.addSubview(overlaySaveModifiersField)
 
         overlaySaveModifiersRecordButton = NSButton(frame: NSRect(x: 230, y: y - 2, width: 80, height: 24))
         overlaySaveModifiersRecordButton.title = "Record"
         overlaySaveModifiersRecordButton.bezelStyle = .rounded
         overlaySaveModifiersRecordButton.target = self
         overlaySaveModifiersRecordButton.action = #selector(toggleRecordOverlaySaveModifiers)
-        view.addSubview(overlaySaveModifiersRecordButton)
+        contentView.addSubview(overlaySaveModifiersRecordButton)
 
         let overlaySaveHint = createLabel("+ 0-9 in overlay", frame: NSRect(x: 320, y: y, width: 120, height: 20))
         overlaySaveHint.font = NSFont.systemFont(ofSize: 11)
         overlaySaveHint.textColor = .secondaryLabelColor
-        view.addSubview(overlaySaveHint)
+        contentView.addSubview(overlaySaveHint)
         y -= 28
 
         // Overlay Clear Modifiers
         let overlayClearLabel = createLabel("Clear:", frame: NSRect(x: 40, y: y, width: 80, height: 20))
         overlayClearLabel.font = NSFont.systemFont(ofSize: 13)
-        view.addSubview(overlayClearLabel)
+        contentView.addSubview(overlayClearLabel)
 
         overlayClearModifiersField = NSTextField(frame: NSRect(x: 120, y: y - 2, width: 100, height: 24))
         overlayClearModifiersField.isEditable = false
         overlayClearModifiersField.isSelectable = false
         overlayClearModifiersField.alignment = .center
         overlayClearModifiersField.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .medium)
-        view.addSubview(overlayClearModifiersField)
+        contentView.addSubview(overlayClearModifiersField)
 
         overlayClearModifiersRecordButton = NSButton(frame: NSRect(x: 230, y: y - 2, width: 80, height: 24))
         overlayClearModifiersRecordButton.title = "Record"
         overlayClearModifiersRecordButton.bezelStyle = .rounded
         overlayClearModifiersRecordButton.target = self
         overlayClearModifiersRecordButton.action = #selector(toggleRecordOverlayClearModifiers)
-        view.addSubview(overlayClearModifiersRecordButton)
+        contentView.addSubview(overlayClearModifiersRecordButton)
 
         let overlayClearHint = createLabel("+ 0-9 in overlay", frame: NSRect(x: 320, y: y, width: 120, height: 20))
         overlayClearHint.font = NSFont.systemFont(ofSize: 11)
         overlayClearHint.textColor = .secondaryLabelColor
-        view.addSubview(overlayClearHint)
+        contentView.addSubview(overlayClearHint)
         y -= 28
 
         // Additional shortcuts info
         let additionalLabel = createLabel("Rename Shortcut:", frame: NSRect(x: 20, y: y, width: 130, height: 20))
         additionalLabel.font = NSFont.boldSystemFont(ofSize: 13)
-        view.addSubview(additionalLabel)
+        contentView.addSubview(additionalLabel)
 
         let renameHint = createLabel("Restore modifiers + Comma (,) to rename active space", frame: NSRect(x: 150, y: y, width: 400, height: 20))
         renameHint.font = NSFont.systemFont(ofSize: 11)
         renameHint.textColor = .secondaryLabelColor
-        view.addSubview(renameHint)
+        contentView.addSubview(renameHint)
         y -= 32
 
         // Usage instructions
         let usageLabel = createLabel("How It Works:", frame: NSRect(x: 20, y: y, width: 200, height: 20))
         usageLabel.font = NSFont.boldSystemFont(ofSize: 13)
-        view.addSubview(usageLabel)
+        contentView.addSubview(usageLabel)
         y -= 20
 
         let usageTexts = [
@@ -1417,26 +1467,27 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
             let label = createLabel(text, frame: NSRect(x: 20, y: y, width: 550, height: 16))
             label.font = NSFont.systemFont(ofSize: 11)
             label.textColor = .secondaryLabelColor
-            view.addSubview(label)
+            contentView.addSubview(label)
             y -= 16
         }
 
-        // Reset button for this tab
-        let resetButton = NSButton(frame: NSRect(x: 20, y: 15, width: 180, height: 24))
+
+        // Reset button outside scroll view at the bottom of the page
+        let resetButton = NSButton(frame: NSRect(x: 20, y: 2, width: 180, height: 24))
         resetButton.title = "Reset Spaces Settings"
         resetButton.bezelStyle = .rounded
         resetButton.target = self
         resetButton.action = #selector(resetVirtualSpacesSettings)
         view.addSubview(resetButton)
 
-        // Card backgrounds
-        addCardBackground(to: view, frame: NSRect(x: 8, y: 270, width: 584, height: 170))
-        addCardBackground(to: view, frame: NSRect(x: 8, y: 60, width: 584, height: 203))
-
         return view
     }
 
     @objc private func resetVirtualSpacesSettings() {
+        confirmReset(tabName: "Spaces Settings") { [weak self] in self?.doResetVirtualSpacesSettings() }
+    }
+
+    private func doResetVirtualSpacesSettings() {
         let defaults = MacTileSettings.default
 
         virtualSpacesEnabledCheckbox.state = defaults.virtualSpacesEnabled ? .on : .off
@@ -1767,12 +1818,6 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
                         NSEvent.removeMonitor(monitor)
                         self.overlaySaveModifiersMonitor = nil
                     }
-
-                    // Save immediately
-                    SettingsManager.shared.updateOverlayVirtualSpaceModifiers(
-                        save: self.recordedOverlaySaveModifiers,
-                        clear: self.recordedOverlayClearModifiers
-                    )
                     return nil
                 }
 
@@ -1843,12 +1888,6 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
                         NSEvent.removeMonitor(monitor)
                         self.overlayClearModifiersMonitor = nil
                     }
-
-                    // Save immediately
-                    SettingsManager.shared.updateOverlayVirtualSpaceModifiers(
-                        save: self.recordedOverlaySaveModifiers,
-                        clear: self.recordedOverlayClearModifiers
-                    )
                     return nil
                 }
 
@@ -1914,7 +1953,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         view.addSubview(nameLabel)
 
         // Version
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.4.0"
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.4.1"
         let versionLabel = NSTextField(frame: NSRect(x: 0, y: 215, width: view.bounds.width, height: 20))
         versionLabel.stringValue = "Version \(version)"
         versionLabel.font = NSFont.systemFont(ofSize: 13)
@@ -2129,6 +2168,7 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
         // Load presets
         // Clear existing preset rows
         for row in presetRows {
+            row.cancelRecordingIfActive()
             row.removeFromSuperview()
         }
         presetRows.removeAll()
@@ -2422,45 +2462,20 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     @objc private func applySettings() {
+        dispatchPrecondition(condition: .onQueue(.main))
+
         // Parse grid sizes
         let gridSizes = MacTileSettings.parseGridSizes(gridSizesField.stringValue)
-        if !gridSizes.isEmpty {
-            SettingsManager.shared.updateGridSizes(gridSizes)
-        }
 
-        // Update spacing
-        SettingsManager.shared.updateWindowSpacing(CGFloat(spacingSlider.integerValue))
-
-        // Update insets
+        // Build insets
         let insets = EdgeInsets(
             top: CGFloat(Int(insetTopField.stringValue) ?? 0),
             left: CGFloat(Int(insetLeftField.stringValue) ?? 0),
             bottom: CGFloat(Int(insetBottomField.stringValue) ?? 0),
             right: CGFloat(Int(insetRightField.stringValue) ?? 0)
         )
-        SettingsManager.shared.updateInsets(insets)
 
-        // Update behavior
-        SettingsManager.shared.updateAutoClose(autoCloseCheckbox.state == .on)
-        SettingsManager.shared.updateShowMenuBarIcon(showIconCheckbox.state == .on)
-        SettingsManager.shared.updateLaunchAtLogin(launchAtLoginCheckbox.state == .on)
-        SettingsManager.shared.updateConfirmOnClickWithoutDrag(confirmOnClickCheckbox.state == .on)
-
-        // Update overlay display
-        SettingsManager.shared.updateShowHelpText(showHelpTextCheckbox.state == .on)
-        SettingsManager.shared.updateShowMonitorIndicator(showMonitorIndicatorCheckbox.state == .on)
-
-        // Update primary shortcut
-        if let shortcut = recordedShortcut {
-            SettingsManager.shared.updateToggleOverlayShortcut(shortcut)
-        }
-
-        // Update secondary shortcut (can be nil to clear it)
-        SettingsManager.shared.updateSecondaryToggleOverlayShortcut(
-            hasSecondaryShortcut ? recordedSecondaryShortcut : nil
-        )
-
-        // Update overlay keyboard settings
+        // Build keyboard settings
         let keyboardSettings = OverlayKeyboardSettings(
             panModifier: indexToModifier(panModifierPopup.indexOfSelectedItem),
             anchorModifier: indexToModifier(anchorModifierPopup.indexOfSelectedItem),
@@ -2469,9 +2484,8 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
             cancelKeyCode: cancelIndexToKeyCode(cancelKeyPopup.indexOfSelectedItem),
             cycleGridKeyCode: cycleIndexToKeyCode(cycleGridKeyPopup.indexOfSelectedItem)
         )
-        SettingsManager.shared.updateOverlayKeyboard(keyboardSettings)
 
-        // Update appearance settings
+        // Build appearance settings
         let appearanceSettings = AppearanceSettings(
             overlayBackgroundColor: SettingsColor(nsColor: overlayColorWell.color),
             overlayOpacity: CGFloat(overlayOpacitySlider.doubleValue),
@@ -2485,39 +2499,56 @@ class SettingsWindowController: NSWindowController, NSWindowDelegate {
             anchorMarkerColor: SettingsColor(nsColor: anchorMarkerColorWell.color),
             targetMarkerColor: SettingsColor(nsColor: targetMarkerColorWell.color)
         )
-        SettingsManager.shared.updateAppearance(appearanceSettings)
 
-        // Update tiling presets
+        // Collect tiling presets
         let presets = presetRows.compactMap { row -> TilingPreset? in
             let preset = row.getPreset()
-            // Only include presets with a valid key binding
             if preset.keyCode > 0 && !preset.keyString.isEmpty {
                 return preset
             }
             return nil
         }
-        SettingsManager.shared.updateTilingPresets(presets)
 
-        // Update focus presets
+        // Collect focus presets
         let focusPresets = focusPresetRows.compactMap { row -> FocusPreset? in
             let preset = row.getPreset()
-            // Only include presets with a valid key binding and app
             if preset.keyCode > 0 && !preset.keyString.isEmpty && !preset.appBundleID.isEmpty {
                 return preset
             }
             return nil
         }
-        SettingsManager.shared.updateFocusPresets(focusPresets)
 
-        // Update virtual spaces settings
-        SettingsManager.shared.updateVirtualSpacesEnabled(virtualSpacesEnabledCheckbox.state == .on)
-        SettingsManager.shared.updateVirtualSpacesSharedAcrossMonitors(virtualSpacesSharedAcrossMonitorsCheckbox.state == .on)
-        SettingsManager.shared.updateSketchybarIntegration(sketchybarIntegrationCheckbox.state == .on)
-        SettingsManager.shared.updateVirtualSpaceModifiers(
-            save: recordedSaveModifiers,
-            restore: recordedRestoreModifiers,
-            clear: recordedClearModifiers
+        // Build complete settings struct and save in one shot (single notification)
+        let newSettings = MacTileSettings(
+            gridSizes: gridSizes.isEmpty ? SettingsManager.shared.settings.gridSizes : gridSizes,
+            windowSpacing: CGFloat(spacingSlider.integerValue),
+            insets: insets,
+            autoClose: autoCloseCheckbox.state == .on,
+            showMenuBarIcon: showIconCheckbox.state == .on,
+            launchAtLogin: launchAtLoginCheckbox.state == .on,
+            confirmOnClickWithoutDrag: confirmOnClickCheckbox.state == .on,
+            showHelpText: showHelpTextCheckbox.state == .on,
+            showMonitorIndicator: showMonitorIndicatorCheckbox.state == .on,
+            toggleOverlayShortcut: recordedShortcut ?? SettingsManager.shared.settings.toggleOverlayShortcut,
+            secondaryToggleOverlayShortcut: hasSecondaryShortcut ? recordedSecondaryShortcut : nil,
+            overlayKeyboard: keyboardSettings,
+            tilingPresets: presets,
+            focusPresets: focusPresets,
+            appearance: appearanceSettings,
+            virtualSpaces: SettingsManager.shared.settings.virtualSpaces,
+            virtualSpacesEnabled: virtualSpacesEnabledCheckbox.state == .on,
+            virtualSpaceSaveModifiers: recordedSaveModifiers,
+            virtualSpaceRestoreModifiers: recordedRestoreModifiers,
+            virtualSpaceClearModifiers: recordedClearModifiers,
+            overlayVirtualSpaceSaveModifiers: recordedOverlaySaveModifiers,
+            overlayVirtualSpaceClearModifiers: recordedOverlayClearModifiers,
+            sketchybarIntegrationEnabled: sketchybarIntegrationCheckbox.state == .on,
+            sketchybarCommand: SettingsManager.shared.settings.sketchybarCommand
         )
+        SettingsManager.shared.updateSettings(newSettings)
+
+        // This setting is stored separately in UserDefaults (not in MacTileSettings struct)
+        SettingsManager.shared.updateVirtualSpacesSharedAcrossMonitors(virtualSpacesSharedAcrossMonitorsCheckbox.state == .on)
 
         window?.close()
     }
@@ -2607,28 +2638,40 @@ class PresetRowView: NSView {
         updateUI()
     }
 
+    deinit {
+        cancelRecordingIfActive()
+    }
+
+    func cancelRecordingIfActive() {
+        if let monitor = localMonitor {
+            NSEvent.removeMonitor(monitor)
+            localMonitor = nil
+        }
+        isRecording = false
+    }
+
     private func setupUI() {
         let y: CGFloat = 5
         var x: CGFloat = 5
 
         // Single record button that captures modifiers + key
-        recordButton = NSButton(frame: NSRect(x: x, y: y, width: 100, height: 22))
+        recordButton = NSButton(frame: NSRect(x: x, y: y, width: 65, height: 22))
         recordButton.title = "Record"
         recordButton.bezelStyle = .rounded
         recordButton.font = NSFont.systemFont(ofSize: 11)
         recordButton.target = self
         recordButton.action = #selector(toggleRecord)
         addSubview(recordButton)
-        x += 105
+        x += 70
 
         // Coordinates field (supports multiple positions with | separator)
-        coordinatesField = NSTextField(frame: NSRect(x: x, y: y, width: 230, height: 22))
+        coordinatesField = NSTextField(frame: NSRect(x: x, y: y, width: 295, height: 22))
         coordinatesField.placeholderString = "(0,0);(0.5,1) | (0,0);(0.67,1)"
         coordinatesField.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
         coordinatesField.target = self
         coordinatesField.action = #selector(coordinatesChanged)
         addSubview(coordinatesField)
-        x += 235
+        x += 300
 
         // Timeout field with ms label
         timeoutField = NSTextField(frame: NSRect(x: x, y: y, width: 55, height: 22))
@@ -2872,6 +2915,18 @@ class FocusPresetRowView: NSView, NSMenuDelegate {
         super.init(coder: coder)
         setupUI()
         updateUI()
+    }
+
+    deinit {
+        cancelRecordingIfActive()
+    }
+
+    func cancelRecordingIfActive() {
+        if let monitor = localMonitor {
+            NSEvent.removeMonitor(monitor)
+            localMonitor = nil
+        }
+        isRecording = false
     }
 
     private func setupUI() {
