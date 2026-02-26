@@ -264,13 +264,15 @@ class OverlayWindowController: NSWindowController {
         guard let screen = currentScreen else { return }
 
         // Calculate initial selection based on current window position on that monitor
+        let effectiveInsets = SketchybarIntegration.shared.effectiveInsets(
+            for: screen, userInsets: windowTiler.insets)
         let initialSelection: GridSelection
         if let targetWindow = targetWindow {
             initialSelection = GridOperations.rectToSelection(
                 rect: targetWindow.frame,
                 gridSize: gridSize,
                 screenFrame: screen.visibleFrame,
-                insets: windowTiler.insets
+                insets: effectiveInsets
             )
             print("Initial selection from window: cols \(initialSelection.anchor.col)-\(initialSelection.target.col)")
         } else {
@@ -397,7 +399,7 @@ class OverlayWindowController: NSWindowController {
     }
 
     /// Calculate and set safe area insets for the grid view
-    /// These insets define the unusable area (menu bar, dock, plus user-configured insets)
+    /// These insets define the unusable area (menu bar, dock, sketchybar, plus user-configured insets)
     /// so the grid only covers the area where windows can actually be placed
     private func updateGridViewSafeAreaInsets(for screen: NSScreen) {
         guard let gridView = gridView else { return }
@@ -412,18 +414,19 @@ class OverlayWindowController: NSWindowController {
         let osLeftInset = screen.visibleFrame.minX - screen.frame.minX
         let osRightInset = screen.frame.maxX - screen.visibleFrame.maxX
 
-        // User-configured insets (e.g. for sketchybar or other custom bars)
-        let userInsets = windowTiler.insets
+        // Effective insets: user-configured + sketchybar auto-adjustment for this screen
+        let effective = SketchybarIntegration.shared.effectiveInsets(
+            for: screen, userInsets: windowTiler.insets)
 
-        let topInset = osTopInset + userInsets.top
-        let bottomInset = osBottomInset + userInsets.bottom
-        let leftInset = osLeftInset + userInsets.left
-        let rightInset = osRightInset + userInsets.right
+        let topInset = osTopInset + effective.top
+        let bottomInset = osBottomInset + effective.bottom
+        let leftInset = osLeftInset + effective.left
+        let rightInset = osRightInset + effective.right
 
         print("[SafeArea] Screen frame: \(screen.frame)")
         print("[SafeArea] Screen visibleFrame: \(screen.visibleFrame)")
         print("[SafeArea] OS insets - top: \(osTopInset), bottom: \(osBottomInset), left: \(osLeftInset), right: \(osRightInset)")
-        print("[SafeArea] User insets - top: \(userInsets.top), bottom: \(userInsets.bottom), left: \(userInsets.left), right: \(userInsets.right)")
+        print("[SafeArea] Effective insets - top: \(effective.top), bottom: \(effective.bottom), left: \(effective.left), right: \(effective.right)")
         print("[SafeArea] Total insets - top: \(topInset), bottom: \(bottomInset), left: \(leftInset), right: \(rightInset)")
 
         gridView.topSafeAreaInset = max(0, topInset)
@@ -535,20 +538,23 @@ class OverlayWindowController: NSWindowController {
                 return
             }
 
+            let effectiveInsets = SketchybarIntegration.shared.effectiveInsets(
+                for: screen, userInsets: windowTiler.insets)
+
             print("[ApplySelection] ═══════════════════════════════════════════════")
             print("[ApplySelection] Tiling to monitor \(currentMonitorIndex + 1)/\(monitorCount)")
             print("[ApplySelection] Grid size: \(gridSize.cols)x\(gridSize.rows)")
             print("[ApplySelection] Selection: anchor=(\(selection.anchor.col),\(selection.anchor.row)) target=(\(selection.target.col),\(selection.target.row))")
             print("[ApplySelection] Normalized: \(selection.normalized)")
             print("[ApplySelection] Screen visible frame: \(screen.visibleFrame)")
-            print("[ApplySelection] Spacing: \(windowTiler.spacing), Insets: \(windowTiler.insets)")
+            print("[ApplySelection] Spacing: \(windowTiler.spacing), Effective insets: \(effectiveInsets)")
 
             let targetFrame = GridOperations.selectionToRect(
                 selection: selection,
                 gridSize: gridSize,
                 screenFrame: screen.visibleFrame,
                 spacing: windowTiler.spacing,
-                insets: windowTiler.insets
+                insets: effectiveInsets
             )
 
             print("[ApplySelection] Calculated target frame: \(targetFrame)")
@@ -571,11 +577,29 @@ class OverlayWindowController: NSWindowController {
             }
         } else {
             print("No target window captured - trying to get current focused window")
-            let tiler = self.windowTiler
+            guard let screen = currentScreen else {
+                print("No current screen found for fallback tiling")
+                return
+            }
+            let effectiveInsets = SketchybarIntegration.shared.effectiveInsets(
+                for: screen, userInsets: windowTiler.insets)
             let sel = selection
             let gs = gridSize
+            let spacing = windowTiler.spacing
+            let visibleFrame = screen.visibleFrame
             DispatchQueue.global(qos: .userInitiated).async {
-                let success = tiler.tileFocusedWindow(to: sel, gridSize: gs)
+                guard let window = RealWindowManager.shared.getFocusedWindow() else {
+                    print("Failed to tile window - no focused window found")
+                    return
+                }
+                let targetFrame = GridOperations.selectionToRect(
+                    selection: sel,
+                    gridSize: gs,
+                    screenFrame: visibleFrame,
+                    spacing: spacing,
+                    insets: effectiveInsets
+                )
+                let success = RealWindowManager.shared.setWindowFrame(window, frame: targetFrame)
                 if success {
                     print("[ApplySelection] ✓ Tiled focused window via fallback path")
                 } else {

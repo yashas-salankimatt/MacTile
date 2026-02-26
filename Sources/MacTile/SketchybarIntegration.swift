@@ -1,11 +1,66 @@
 import Foundation
 import AppKit
+import MacTileCore
+
+/// Bar configuration relevant to tiling adjustments
+struct SketchybarBarInfo {
+    let height: CGFloat
+    let position: BarPosition
+
+    enum BarPosition: String {
+        case top
+        case bottom
+    }
+
+    static let zero = SketchybarBarInfo(height: 0, position: .top)
+}
 
 /// Handles sketchybar integration setup, file deployment, and service management
 class SketchybarIntegration {
     static let shared = SketchybarIntegration()
 
     private let fileManager = FileManager.default
+
+    // MARK: - Sketchybar Binary Path (shared with VirtualSpaceManager)
+
+    /// Detect the sketchybar binary location, checking common paths and falling back to `which`
+    static let sketchybarBinaryPath: String? = {
+        let paths = [
+            "/opt/homebrew/bin/sketchybar",  // Homebrew on Apple Silicon
+            "/usr/local/bin/sketchybar",      // Homebrew on Intel
+            "/run/current-system/sw/bin/sketchybar"  // NixOS
+        ]
+        for path in paths {
+            if FileManager.default.isExecutableFile(atPath: path) {
+                return path
+            }
+        }
+        // Fallback: use `which` to find sketchybar in PATH
+        let whichProcess = Process()
+        whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        whichProcess.arguments = ["sketchybar"]
+        let pipe = Pipe()
+        whichProcess.standardOutput = pipe
+        whichProcess.standardError = FileHandle.nullDevice
+        do {
+            try whichProcess.run()
+            whichProcess.waitUntilExit()
+            if whichProcess.terminationStatus == 0 {
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !path.isEmpty {
+                    return path
+                }
+            }
+        } catch {}
+        return nil
+    }()
+
+    // MARK: - Bar Info Caching
+
+    private var cachedBarInfo: SketchybarBarInfo?
+    private var cachedBarInfoTimestamp: Date?
+    private let barInfoCacheDuration: TimeInterval = 60
 
     /// Sketchybar config directory
     private var sketchybarConfigDir: URL {
@@ -92,14 +147,83 @@ class SketchybarIntegration {
         // 6. Restart sketchybar
         restartSketchybar()
 
+        // 7. Invalidate bar info cache so next query picks up fresh config
+        invalidateBarInfoCache()
+
         return sketchybarrcResult
     }
 
     /// Disable sketchybar integration
     func disableIntegration() {
         print("[SketchybarIntegration] Disabling integration...")
-        // Stop sketchybar
+        invalidateBarInfoCache()
         stopSketchybar()
+    }
+
+    // MARK: - Bar Info Querying
+
+    /// Get bar info, using cache if fresh. Returns `.zero` if sketchybar is not running.
+    func getBarInfo() -> SketchybarBarInfo {
+        if let cached = cachedBarInfo,
+           let timestamp = cachedBarInfoTimestamp,
+           Date().timeIntervalSince(timestamp) < barInfoCacheDuration {
+            return cached
+        }
+
+        if let info = queryBarInfo() {
+            cachedBarInfo = info
+            cachedBarInfoTimestamp = Date()
+            return info
+        }
+
+        // Query failed — return stale cache if available, otherwise zero
+        return cachedBarInfo ?? .zero
+    }
+
+    /// Invalidate the cached bar info (call after sketchybar restarts or integration toggles)
+    func invalidateBarInfoCache() {
+        cachedBarInfo = nil
+        cachedBarInfoTimestamp = nil
+    }
+
+    /// Compute the extra inset needed on a specific screen to avoid sketchybar.
+    /// Returns the amount by which sketchybar extends beyond the OS-reserved area on that edge.
+    ///
+    /// - Built-in display (notch ~37px): `max(0, 40 - 37) = 3px` extra
+    /// - External with menu bar (~25px): `max(0, 40 - 25) = 15px` extra
+    /// - External no menu bar (0px): `max(0, 40 - 0) = 40px` extra
+    func sketchybarExtraInsets(for screen: NSScreen) -> EdgeInsets {
+        guard SettingsManager.shared.settings.sketchybarIntegrationEnabled else {
+            return .zero
+        }
+
+        let barInfo = getBarInfo()
+        guard barInfo.height > 0 else {
+            return .zero
+        }
+
+        let osTopInset = screen.frame.maxY - screen.visibleFrame.maxY
+        let osBottomInset = screen.visibleFrame.minY - screen.frame.minY
+
+        switch barInfo.position {
+        case .top:
+            let extra = max(0, barInfo.height - osTopInset)
+            return EdgeInsets(top: extra, left: 0, bottom: 0, right: 0)
+        case .bottom:
+            let extra = max(0, barInfo.height - osBottomInset)
+            return EdgeInsets(top: 0, left: 0, bottom: extra, right: 0)
+        }
+    }
+
+    /// Compute effective insets for a screen: user manual insets + sketchybar extra
+    func effectiveInsets(for screen: NSScreen, userInsets: EdgeInsets) -> EdgeInsets {
+        let extra = sketchybarExtraInsets(for: screen)
+        return EdgeInsets(
+            top: userInsets.top + extra.top,
+            left: userInsets.left + extra.left,
+            bottom: userInsets.bottom + extra.bottom,
+            right: userInsets.right + extra.right
+        )
     }
 
     /// Check if sketchybarrc is configured for MacTile
@@ -118,6 +242,45 @@ class SketchybarIntegration {
     }
 
     // MARK: - Private Methods
+
+    /// Query sketchybar for bar height and position via `sketchybar --query bar`.
+    /// Runs synchronously with a 2-second timeout to avoid hanging the main thread.
+    private func queryBarInfo() -> SketchybarBarInfo? {
+        guard let path = Self.sketchybarBinaryPath else { return nil }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = ["--query", "bar"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+
+            // Terminate if sketchybar hangs (e.g. broken IPC socket)
+            let timeout = DispatchWorkItem { [weak process] in
+                if let p = process, p.isRunning { p.terminate() }
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 2.0, execute: timeout)
+
+            process.waitUntilExit()
+            timeout.cancel()
+
+            guard process.terminationStatus == 0 else { return nil }
+
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let height = json["height"] as? NSNumber else { return nil }
+
+            let positionStr = json["position"] as? String ?? "top"
+            let position = SketchybarBarInfo.BarPosition(rawValue: positionStr) ?? .top
+
+            return SketchybarBarInfo(height: CGFloat(height.doubleValue), position: position)
+        } catch {
+            return nil
+        }
+    }
 
     private func createDirectoriesIfNeeded() throws {
         // Create .config/sketchybar if it doesn't exist

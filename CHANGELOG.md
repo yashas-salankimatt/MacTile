@@ -2,6 +2,22 @@
 
 All notable changes to MacTile will be documented in this file.
 
+## [1.4.2] - 2026-02-25
+
+### Added
+
+- **Per-Monitor Sketchybar Auto-Adjustment**: When sketchybar integration is enabled, MacTile now automatically queries sketchybar for its bar height and adjusts the overlay grid and window tiling per-monitor. Built-in displays (with notch) get minimal extra padding, while external displays get the full bar height offset — no manual inset configuration needed.
+
+### Fixed
+
+- **Overlay Grid Respects User Insets**: The overlay grid now properly accounts for user-configured insets (e.g. for custom bars), so the grid visually matches the actual tiling area instead of drawing over reserved regions
+- **Overlay UI Label Positioning**: Grid size indicator, monitor indicator, selection info, and help text are now positioned within the grid bounds, respecting all safe area insets
+- **Negative Inset Protection**: EdgeInsets now clamps all values to non-negative, preventing invalid configurations from causing windows to tile off-screen
+
+### Improved
+
+- **Shared Sketchybar Binary Detection**: Sketchybar executable path detection is now shared between the event notification system and bar info querying, eliminating duplicated code
+
 ## [1.4.1] - 2026-02-25
 
 ### Fixed

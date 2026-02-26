@@ -69,38 +69,10 @@ class VirtualSpaceManager {
         case clear
     }
 
-    /// Find sketchybar executable in common locations
-    private static let sketchybarPath: String? = {
-        let paths = [
-            "/opt/homebrew/bin/sketchybar",  // Homebrew on Apple Silicon
-            "/usr/local/bin/sketchybar",      // Homebrew on Intel
-            "/run/current-system/sw/bin/sketchybar"  // NixOS
-        ]
-        for path in paths {
-            if FileManager.default.isExecutableFile(atPath: path) {
-                return path
-            }
-        }
-        // Try to find via PATH using `which`
-        let whichProcess = Process()
-        whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        whichProcess.arguments = ["sketchybar"]
-        let pipe = Pipe()
-        whichProcess.standardOutput = pipe
-        whichProcess.standardError = FileHandle.nullDevice
-        do {
-            try whichProcess.run()
-            whichProcess.waitUntilExit()
-            if whichProcess.terminationStatus == 0 {
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !path.isEmpty {
-                    return path
-                }
-            }
-        } catch {}
-        return nil
-    }()
+    /// Sketchybar binary path (shared detection via SketchybarIntegration)
+    private static var sketchybarPath: String? {
+        SketchybarIntegration.sketchybarBinaryPath
+    }
 
     /// Notify sketchybar about virtual space changes
     private func notifySketchybar(action: SketchybarAction, space: VirtualSpace?, monitor displayID: UInt32) {
