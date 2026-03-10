@@ -693,6 +693,9 @@ function __icon_map() {
    "Microsoft Excel")
         icon_result=":microsoft_excel:"
         ;;
+   "Microsoft OneNote" | "OneNote")
+        icon_result=":microsoft_onenote:"
+        ;;
    "Microsoft Outlook")
         icon_result=":microsoft_outlook:"
         ;;
