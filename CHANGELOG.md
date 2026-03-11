@@ -2,6 +2,29 @@
 
 All notable changes to MacTile will be documented in this file.
 
+## [1.5.0] - 2026-03-11
+
+### Improved
+
+- **Snappy Window Positioning**: Adopted AeroSpace-inspired window management approach for significantly faster tiling
+  - **Animation disabling**: Temporarily disables `AXEnhancedUserInterface` during frame changes to suppress macOS window animations, resulting in instant visual feedback
+  - **Size→Position→Size ordering**: Uses AeroSpace's proven attribute-setting order to handle macOS AX quirks in a single pass, replacing the previous multi-step safe-zone strategy
+  - **Zero-delay fire-and-forget**: Removed all synchronous `usleep` delays from the main positioning path — AX calls are now issued back-to-back like AeroSpace
+  - **Same-screen moves**: Simplified from safe-position→resize→move to a direct Size→Position→Size sequence
+  - **Cross-monitor moves**: Still shrinks the window first (to bypass browser visibility protection), then applies Size→Position→Size on the target monitor
+  - **Correction loop as safety net**: The iterative correction loop is preserved but now only runs if the initial placement fails — in practice it should rarely be needed
+
+### Fixed
+
+- **Correction loop stuck detection**: Fixed off-by-one where the first iteration could falsely count as "stuck" before any correction was attempted
+- **Window-closed resilience**: Correction loop now detects and bails out when AX reads return zero-size (indicating the window may have closed mid-operation)
+- **Consistent minimum-size acceptance**: Both immediate check and correction loop now use `ResizeStateChecker.isMinimumConstraint` instead of ad-hoc inline logic
+- **Cross-monitor shrink size**: Intermediate shrink size now uses `min()` to avoid temporarily growing a window that's already smaller than 400x300
+
+### Removed
+
+- Removed unused `setSizeWithRetry`, `setPositionWithRetry`, and `axErrorString` methods (dead code from the previous approach)
+
 ## [1.4.2] - 2026-02-25
 
 ### Added

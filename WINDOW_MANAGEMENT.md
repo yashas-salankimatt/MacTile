@@ -7,52 +7,75 @@ MacTile's window management system solves significant challenges with the macOS 
 Unlike GNOME (where gTile operates), macOS's Accessibility API is **asynchronous**. When you call `AXUIElementSetAttributeValue` to set a window's size or position, the call returns immediately but the window may not reach the target state for several milliseconds—or may never reach it due to application constraints.
 
 This creates several problems:
-1. **Race conditions**: Reading window state immediately after setting it returns stale values
-2. **Position-size coupling**: Many apps (especially browsers) move the window when you resize it, and vice versa
-3. **Minimum constraints**: Apps may enforce minimum window sizes that differ from our target
-4. **Edge anchoring**: Windows near screen edges may anchor to that edge during resize operations
+1. **Position-size coupling**: Many apps (especially browsers) move the window when you resize it, and vice versa
+2. **Minimum constraints**: Apps may enforce minimum window sizes that differ from our target
+3. **Cross-monitor resistance**: Browsers refuse to move large windows "mostly off-screen", blocking cross-monitor moves
+4. **Animations**: macOS animates window transitions, causing visual lag and timing issues
 
-## Key Insights from Development
+## Approach: AeroSpace-Inspired Positioning
 
-### 1. gTile Doesn't Need Retries—But We Do
+After analyzing [AeroSpace](https://github.com/nikitabobko/AeroSpace) (a macOS tiling window manager), MacTile adopted several key techniques that eliminate most delays and produce near-instant window positioning.
 
-Exploring gTile's codebase revealed they use a simple two-step approach:
-```javascript
-moveResize(window, newX, newY, newWidth, newHeight) {
-    window.move_frame(true, newX, newY);
-    window.move_resize_frame(true, newX, newY, newWidth, newHeight);
-}
+### 1. Animation Disabling via AXEnhancedUserInterface
+
+The single biggest performance improvement. Before any frame changes, MacTile temporarily sets the undocumented `AXEnhancedUserInterface` attribute to `false` on the target application, then restores it via `defer` after positioning completes. This suppresses macOS window animations during move/resize operations, producing instant visual feedback.
+
+This technique is used by AeroSpace, yabai, and Rectangle.
+
+### 2. Size → Position → Size Order
+
+AeroSpace discovered (issues [#143](https://github.com/nikitabobko/AeroSpace/issues/143), [#335](https://github.com/nikitabobko/AeroSpace/issues/335)) that setting attributes in the order **Size → Position → Size** handles macOS AX quirks where setting one attribute affects the other. This single three-call sequence replaces the previous multi-step safe-zone strategy and iterative correction loops in most cases.
+
+### 3. Fire-and-Forget AX Calls
+
+AX calls are serialized per-app at the accessibility server level, so calls issued back-to-back are processed in order without needing explicit delays. MacTile issues all AX calls with zero `usleep` delays between them, matching AeroSpace's approach.
+
+### 4. Cross-Monitor Shrink Strategy
+
+For cross-monitor moves, browsers and some apps refuse to move large windows across monitor boundaries (they resist being "mostly off-screen"). MacTile handles this by:
+
+1. **Shrink** the window to a small intermediate size (≤400×300, or the target size if smaller)
+2. **Move** the small window to the target position on the other monitor
+3. **Apply Size → Position → Size** for final placement
+
+This adds a small overhead for cross-monitor moves but ensures reliability with stubborn apps.
+
+## The Algorithm
+
+```
+setAXWindowFrame(window, targetFrame):
+    1. DISABLE ANIMATIONS
+       - Read AXEnhancedUserInterface from the app element
+       - Set to false if it was true
+       - defer: restore original value
+
+    2. DETECT CROSS-MONITOR MOVE
+       - Find which screen contains the window's center
+       - Find which screen contains the target's center
+       - Compare screens
+
+    3. POSITION WINDOW
+       If cross-monitor:
+           - Shrink to min(400, targetWidth) × min(300, targetHeight)
+           - Move to target position (small window moves freely)
+           - Size → Position → Size for final placement
+       If same-screen:
+           - Size → Position → Size (direct)
+
+    4. VERIFY
+       - Read back window state immediately
+       - If position and size are within tolerance (±10px) → success
+       - If size exceeds target → check if minimum constraint → accept
+
+    5. CORRECTION LOOP (safety net, rarely needed)
+       - Up to 10 attempts with delays between AX calls
+       - Apply Size → Position → Size each iteration
+       - Detect stuck state (3+ consecutive identical readings)
+       - Detect minimum constraints vs. intermediate states
+       - Bail out if AX reads return zero-size (window closed)
 ```
 
-This works for gTile because GNOME's window management API is **synchronous**—the window is guaranteed to be at the target state when the call returns. macOS provides no such guarantee.
-
-### 2. The "Safe Zone" Strategy
-
-Windows near screen edges exhibit unexpected behavior during resizing. A window at the right edge may anchor to that edge, causing position drift when resized. The solution:
-
-1. **Move to safe zone first**: Move the window to x=0 (left edge) before any resize operations
-2. **Resize in the safe zone**: The left edge provides consistent anchoring behavior
-3. **Move to final position**: After achieving target size, move to the intended position
-
-This approach dramatically improved reliability across all tested applications.
-
-### 3. Unified Correction Loop
-
-Because position and size changes can affect each other, we use a **unified correction loop** that sets both attributes in each iteration:
-
-```
-For each attempt (up to 10):
-    1. Read current window state
-    2. Check if position is within tolerance (±10px)
-    3. Check if size is within tolerance (±10px)
-    4. If both OK, we're done
-    5. If stuck for 3+ attempts with no change, check for minimum constraints
-    6. Otherwise: Set size → wait → Set position → wait → Set size → wait → Set position → wait
-```
-
-The double set (size-position-size-position) helps overcome apps that "fight back" against changes.
-
-### 4. Minimum Constraint Detection
+## Minimum Constraint Detection
 
 Some applications enforce minimum window sizes. Detecting this correctly is crucial:
 
@@ -62,46 +85,20 @@ Some applications enforce minimum window sizes. Detecting this correctly is cruc
 
 The key insight: if we're truly at a minimum constraint, the window state will be completely stable (not changing at all), and the size will exceed the target without falling short in any dimension.
 
-### 5. Tolerance-Based Success
+## Tolerance-Based Success
 
 Pixel-perfect positioning is neither possible nor necessary:
 - **±10 pixels** is acceptable for both position and size
 - This accounts for window chrome variations and system-level adjustments
 
-## The Final Algorithm
-
-```
-moveAndResizeWindow(window, targetFrame):
-    1. FOCUS: Bring window to front (required for some apps)
-
-    2. SAFE ZONE: Move window to x=0 to avoid edge effects
-       - Set position to (0, targetY)
-       - Wait for position to stabilize (up to 5 attempts)
-
-    3. INITIAL SIZE: Set target size in safe zone
-       - Apply target size
-       - Short delay for async processing
-
-    4. UNIFIED CORRECTION LOOP (up to 10 attempts):
-       - Read current state
-       - Check position tolerance (±10px)
-       - Check size tolerance (±10px)
-       - If both OK → success
-       - If stuck 3+ times with no change:
-           - If size exceeds target in all dimensions → minimum constraint (accept)
-           - Otherwise → give up
-       - Apply: size → delay → position → delay → size → delay → position → delay
-
-    5. REPORT: Log final state and any remaining deltas
-```
-
 ## Why This Works
 
-1. **Safe zone eliminates edge anchoring**: By starting at x=0, we get consistent resize behavior
-2. **Multiple iterations overcome async delays**: The AX API may take several attempts to reach target
-3. **Position-size coupling handled**: Setting both each iteration corrects mutual interference
-4. **Conservative minimum detection**: Only accepts constraints after confirming window is truly stuck
-5. **Tolerance allows imperfection**: Real-world window management has inherent imprecision
+1. **Animation disabling eliminates visual lag**: No smooth transitions means the window appears at its target instantly
+2. **S→P→S handles attribute coupling**: The double size-set corrects for position changes affecting size
+3. **AX serialization guarantees order**: Calls are processed sequentially per-app without needing explicit delays
+4. **Cross-monitor shrink bypasses visibility protection**: Small windows move freely across monitor boundaries
+5. **Correction loop catches edge cases**: Acts as a safety net for apps that don't respond to the fast path
+6. **Conservative minimum detection**: Only accepts constraints after confirming the window is truly stuck
 
 ## Testing the Algorithm
 
@@ -122,4 +119,4 @@ This test captures the bug that was causing incorrect minimum constraint detecti
 
 ## Related Code
 
-The implementation lives in `Sources/MacTile/WindowManager.swift`, specifically in the `setWindowFrame(_:frame:)` method of `RealWindowManager`.
+The implementation lives in `Sources/MacTile/WindowManager.swift`, specifically in the `setAXWindowFrame(_:frame:)` method of `RealWindowManager`.

@@ -115,6 +115,14 @@ class RealWindowManager: WindowManagerProtocol {
     /// Set the frame of an AXUIElement window.
     /// This is the shared implementation used by both WindowManager and VirtualSpaceManager.
     /// The frame should be in NSScreen coordinates (bottom-left origin).
+    ///
+    /// Uses AeroSpace-inspired approach:
+    /// - Disables animations via AXEnhancedUserInterface before frame changes
+    /// - Uses Size → Position → Size order to handle macOS AX quirks
+    /// - No synchronous delays between AX calls (fire-and-forget like AeroSpace)
+    /// - For cross-monitor: shrinks first to bypass browser visibility protection,
+    ///   then applies Size → Position → Size on target monitor
+    /// - Correction loop runs as safety net (should rarely be needed)
     @discardableResult
     func setAXWindowFrame(_ axWindow: AXUIElement, frame: CGRect) -> Bool {
         // Use primary screen for AX coordinate conversion
@@ -163,164 +171,187 @@ class RealWindowManager: WindowManagerProtocol {
             print("[WindowManager] Cross-monitor move detected: \(currentScreen?.localizedName ?? "unknown") -> \(targetScreen?.localizedName ?? "unknown")")
         }
 
+        // Disable animations (AeroSpace technique: toggle AXEnhancedUserInterface)
+        // This suppresses macOS window animations during move/resize for instant visual feedback
+        let appElement = getAppElement(for: axWindow)
+        let animationsWereEnabled = disableAnimations(appElement: appElement)
+        defer { restoreAnimations(appElement: appElement, wasEnabled: animationsWereEnabled) }
+
         // STRATEGY depends on whether this is a cross-monitor move
-        // For cross-monitor moves: Shrink first, move, then resize (avoids browser visibility protection)
-        // For same-screen moves: Safe position, resize, then move (handles edge-anchoring apps)
+        // Both strategies use AeroSpace's Size → Position → Size order for the final placement
 
         if isCrossMonitorMove {
-            // CROSS-MONITOR STRATEGY: Shrink window first, then move, then resize to final
+            // CROSS-MONITOR STRATEGY: Shrink window, move to target monitor, then Size → Position → Size
             // Browsers refuse to move large windows "mostly off-screen", but small windows
             // will move freely. By shrinking first, we ensure the move succeeds.
+            //
+            // Note: AX calls are serialized per-app at the accessibility server level,
+            // so the shrink will be processed before the move even without explicit delays.
 
-            print("[WindowManager] Using cross-monitor strategy: shrink, move, then resize")
+            print("[WindowManager] Using cross-monitor strategy: shrink, move, then Size→Position→Size")
 
             // Step 1: Shrink window to a small size that will fit anywhere
-            // Use a size small enough to not trigger visibility protection
-            let smallSize = CGSize(width: 400, height: 300)
+            // Use min of 400/300 and target to avoid growing the window if target is already small
+            let smallSize = CGSize(width: min(400, targetSize.width), height: min(300, targetSize.height))
             print("[WindowManager] Step 1: Shrinking to intermediate size \(smallSize)")
-            var size = smallSize
-            if let sizeValue = AXValueCreate(.cgSize, &size) {
-                AXUIElementSetAttributeValue(axWindow, kAXSizeAttribute as CFString, sizeValue)
-            }
-            usleep(50000) // 50ms - give window time to shrink
+            setWindowSize(axWindow, size: smallSize)
 
-            // Step 2: Move to target position (small window will move freely)
+            // Step 2: Move to target position (small window will move freely across monitors)
             print("[WindowManager] Step 2: Moving to target position \(targetPosition)")
-            var position = targetPosition
-            if let posValue = AXValueCreate(.cgPoint, &position) {
-                AXUIElementSetAttributeValue(axWindow, kAXPositionAttribute as CFString, posValue)
-            }
-            usleep(50000) // 50ms - give window time to move across monitors
+            setWindowPosition(axWindow, position: targetPosition)
 
-            // Step 3: Resize to final size
-            print("[WindowManager] Step 3: Resizing to final size \(targetSize)")
-            size = targetSize
-            if let sizeValue = AXValueCreate(.cgSize, &size) {
-                AXUIElementSetAttributeValue(axWindow, kAXSizeAttribute as CFString, sizeValue)
-            }
-            usleep(50000) // 50ms
-
-            // Step 4: Correct position (resize may have shifted it)
-            print("[WindowManager] Step 4: Correcting position to \(targetPosition)")
-            if let posValue = AXValueCreate(.cgPoint, &position) {
-                AXUIElementSetAttributeValue(axWindow, kAXPositionAttribute as CFString, posValue)
-            }
-            usleep(30000) // 30ms
+            // Step 3: Apply Size → Position → Size (AeroSpace pattern) for final placement
+            print("[WindowManager] Step 3: Size→Position→Size for final placement")
+            setWindowSize(axWindow, size: targetSize)
+            setWindowPosition(axWindow, position: targetPosition)
+            setWindowSize(axWindow, size: targetSize)
 
         } else {
-            // SAME-SCREEN STRATEGY: Safe position first, then resize, then final position
-            // This handles apps that anchor edges during resize
+            // SAME-SCREEN STRATEGY: Direct Size → Position → Size (AeroSpace pattern)
+            // No safe-move needed — the S→P→S order handles edge-anchoring
 
-            print("[WindowManager] Using same-screen strategy: safe position, size, then final position")
+            print("[WindowManager] Using same-screen strategy: Size→Position→Size")
 
-            // Step 1: Move window to left edge to give it room to resize
-            // Only do this if the window is not already near the left edge of the target screen
-            let screenLeftEdge = targetScreen?.frame.origin.x ?? 0
-            let needsSafeMove = beforeState.position.x > screenLeftEdge + 100
-
-            if needsSafeMove {
-                var safePosition = CGPoint(x: screenLeftEdge, y: beforeState.position.y)
-                print("[WindowManager] Step 1: Moving to safe position \(safePosition) first")
-                if let posValue = AXValueCreate(.cgPoint, &safePosition) {
-                    AXUIElementSetAttributeValue(axWindow, kAXPositionAttribute as CFString, posValue)
-                }
-                usleep(30000) // 30ms - give window time to move
-            }
-
-            // Step 2: Initial size set
-            print("[WindowManager] Step 2: Setting initial size to \(targetSize)")
-            var size = targetSize
-            if let sizeValue = AXValueCreate(.cgSize, &size) {
-                AXUIElementSetAttributeValue(axWindow, kAXSizeAttribute as CFString, sizeValue)
-            }
-            usleep(40000) // 40ms
-
-            // Step 3: Set position
-            print("[WindowManager] Step 3: Setting position to \(targetPosition)")
-            var position = targetPosition
-            if let posValue = AXValueCreate(.cgPoint, &position) {
-                AXUIElementSetAttributeValue(axWindow, kAXPositionAttribute as CFString, posValue)
-            }
-            usleep(30000) // 30ms
+            setWindowSize(axWindow, size: targetSize)
+            setWindowPosition(axWindow, position: targetPosition)
+            setWindowSize(axWindow, size: targetSize)
         }
 
-        // Unified correction loop - some apps link position and size
-        // Setting size can move the window, so we need to correct both together
-        // Some apps resize gradually and need multiple attempts
-        // Key insight from gTile: they don't use retry logic because GNOME API is synchronous
-        // But macOS AX API is asynchronous - we MUST retry until stable for ALL window types
-        print("[WindowManager] Unified correction loop")
+        // Quick synchronous check — did it land correctly?
+        let immediateState = readWindowState(axWindow)
+        let positionOKImmediate = ResizeStateChecker.isPositionOK(actual: immediateState.position, target: targetPosition)
+        let sizeOKImmediate = ResizeStateChecker.isSizeOK(actual: immediateState.size, target: targetSize)
+        let sizeAcceptableImmediate = sizeOKImmediate || ResizeStateChecker.isMinimumConstraint(actual: immediateState.size, target: targetSize)
+
+        if positionOKImmediate && sizeAcceptableImmediate {
+            print("[WindowManager] ✓ Window frame set successfully (no correction needed)")
+            print("[WindowManager] FINAL - Position: \(immediateState.position), Size: \(immediateState.size)")
+            print("[WindowManager] ═══════════════════════════════════════════════")
+            return true
+        }
+
+        print("[WindowManager] Initial placement needs correction, starting correction loop")
+        print("[WindowManager]   Current: pos=\(immediateState.position), size=\(immediateState.size)")
+
+        // Correction loop — safety net for apps that don't respond instantly
+        // This should rarely be needed with animation disabling + S→P→S order
+        let correctionResult = runCorrectionLoop(axWindow, targetPosition: targetPosition, targetSize: targetSize)
+
+        print("[WindowManager] ═══════════════════════════════════════════════")
+
+        return correctionResult
+    }
+
+    // MARK: - Animation Control (AeroSpace technique)
+
+    /// Get the app-level AXUIElement for a window (needed for AXEnhancedUserInterface)
+    private func getAppElement(for axWindow: AXUIElement) -> AXUIElement? {
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(axWindow, &pid) == .success else {
+            return nil
+        }
+        return AXUIElementCreateApplication(pid)
+    }
+
+    /// Disable window animations by setting AXEnhancedUserInterface to false
+    /// Returns whether animations were previously enabled (so we can restore)
+    private func disableAnimations(appElement: AXUIElement?) -> Bool {
+        guard let app = appElement else { return false }
+
+        var value: CFTypeRef?
+        let result = AXUIElementCopyAttributeValue(app, "AXEnhancedUserInterface" as CFString, &value)
+        let wasEnabled = (result == .success) && (value as? Bool == true)
+
+        if wasEnabled {
+            AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanFalse)
+            print("[WindowManager] Disabled AXEnhancedUserInterface for snappy positioning")
+        }
+
+        return wasEnabled
+    }
+
+    /// Restore animations if they were previously enabled
+    private func restoreAnimations(appElement: AXUIElement?, wasEnabled: Bool) {
+        guard let app = appElement, wasEnabled else { return }
+        AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
+        print("[WindowManager] Restored AXEnhancedUserInterface")
+    }
+
+    // MARK: - AX Attribute Helpers (no delays, fire-and-forget like AeroSpace)
+
+    private func setWindowSize(_ axWindow: AXUIElement, size: CGSize) {
+        var s = size
+        if let sizeValue = AXValueCreate(.cgSize, &s) {
+            AXUIElementSetAttributeValue(axWindow, kAXSizeAttribute as CFString, sizeValue)
+        }
+    }
+
+    private func setWindowPosition(_ axWindow: AXUIElement, position: CGPoint) {
+        var p = position
+        if let posValue = AXValueCreate(.cgPoint, &p) {
+            AXUIElementSetAttributeValue(axWindow, kAXPositionAttribute as CFString, posValue)
+        }
+    }
+
+    // MARK: - Correction Loop (safety net)
+
+    /// Runs a correction loop as a safety net. Should rarely be needed with animation
+    /// disabling + Size→Position→Size order. Returns whether final state is acceptable.
+    private func runCorrectionLoop(_ axWindow: AXUIElement, targetPosition: CGPoint, targetSize: CGSize) -> Bool {
         let maxCorrectionAttempts = 10
         var positionOK = false
         var sizeOK = false
-        var lastState = readWindowState(axWindow)
+        // Initialize lastState to a sentinel so the first iteration never counts as "stuck"
+        var lastState: (position: CGPoint, size: CGSize) = (CGPoint(x: -1, y: -1), CGSize(width: -1, height: -1))
         var stuckCount = 0
 
         for attempt in 1...maxCorrectionAttempts {
             let state = readWindowState(axWindow)
 
-            // Check position accuracy using ResizeStateChecker
-            positionOK = ResizeStateChecker.isPositionOK(actual: state.position, target: targetPosition)
+            // Bail out if AX reads are failing (window may have closed)
+            if state.size == .zero {
+                print("[WindowManager]   Correction attempt \(attempt): AX read returned zero size, window may be gone")
+                return false
+            }
 
-            // Check size accuracy using ResizeStateChecker
+            positionOK = ResizeStateChecker.isPositionOK(actual: state.position, target: targetPosition)
             sizeOK = ResizeStateChecker.isSizeOK(actual: state.size, target: targetSize)
 
             if positionOK && sizeOK {
-                print("[WindowManager]   Attempt \(attempt): Both position and size OK")
+                print("[WindowManager]   Correction attempt \(attempt): Both position and size OK")
                 break
             }
 
             // Check if we're stuck - same state as last attempt
-            // Only consider minimum constraint if we're truly stuck (no change for 3+ attempts)
             if state.position == lastState.position && state.size == lastState.size {
                 stuckCount += 1
                 if stuckCount >= 3 {
-                    // Now check if this looks like a minimum constraint using ResizeStateChecker
                     if ResizeStateChecker.isMinimumConstraint(actual: state.size, target: targetSize) {
-                        print("[WindowManager]   Attempt \(attempt): Stuck at minimum constraint (w:\(state.size.width) vs \(targetSize.width), h:\(state.size.height) vs \(targetSize.height))")
-                        sizeOK = true // Accept this as the best we can do
+                        print("[WindowManager]   Correction attempt \(attempt): Stuck at minimum constraint (w:\(state.size.width) vs \(targetSize.width), h:\(state.size.height) vs \(targetSize.height))")
+                        sizeOK = true
                         break
                     } else {
-                        print("[WindowManager]   Attempt \(attempt): Stuck (no progress for \(stuckCount) attempts), stopping")
+                        print("[WindowManager]   Correction attempt \(attempt): Stuck (no progress for \(stuckCount) attempts), stopping")
                         break
                     }
                 }
             } else {
-                stuckCount = 0 // Reset if we made progress
+                stuckCount = 0
             }
             lastState = state
 
-            print("[WindowManager]   Attempt \(attempt): pos=\(state.position) (ok=\(positionOK)), size=\(state.size) (ok=\(sizeOK))")
+            print("[WindowManager]   Correction attempt \(attempt): pos=\(state.position) (ok=\(positionOK)), size=\(state.size) (ok=\(sizeOK))")
 
-            // Always set both size and position each iteration
-            // Set size first
-            var sz = targetSize
-            if let sizeValue = AXValueCreate(.cgSize, &sz) {
-                AXUIElementSetAttributeValue(axWindow, kAXSizeAttribute as CFString, sizeValue)
-            }
-            usleep(30000) // 30ms
-
-            // Then set position
-            var pos = targetPosition
-            if let posValue = AXValueCreate(.cgPoint, &pos) {
-                AXUIElementSetAttributeValue(axWindow, kAXPositionAttribute as CFString, posValue)
-            }
+            // Apply Size → Position → Size correction pattern
+            setWindowSize(axWindow, size: targetSize)
+            usleep(30000) // 30ms — delay in the correction loop to let AX settle
+            setWindowPosition(axWindow, position: targetPosition)
             usleep(25000)
-
-            // Set size again (position change can affect size)
-            if let sizeValue = AXValueCreate(.cgSize, &sz) {
-                AXUIElementSetAttributeValue(axWindow, kAXSizeAttribute as CFString, sizeValue)
-            }
+            setWindowSize(axWindow, size: targetSize)
             usleep(25000)
-
-            // Final position adjustment (size change can affect position)
-            if let posValue = AXValueCreate(.cgPoint, &pos) {
-                AXUIElementSetAttributeValue(axWindow, kAXPositionAttribute as CFString, posValue)
-            }
-            usleep(20000)
         }
 
-        // Read final state and check using ResizeStateChecker
+        // Read final state
         let finalState = readWindowState(axWindow)
         positionOK = ResizeStateChecker.isPositionOK(actual: finalState.position, target: targetPosition)
         sizeOK = ResizeStateChecker.isSizeOK(actual: finalState.size, target: targetSize)
@@ -332,7 +363,6 @@ class RealWindowManager: WindowManagerProtocol {
             print("[WindowManager]     Delta: x=\(finalState.position.x - targetPosition.x), y=\(finalState.position.y - targetPosition.y)")
         }
         if !sizeOK {
-            // Check if it's a minimum size constraint
             if finalState.size.width > targetSize.width {
                 print("[WindowManager] ⚠️  Size mismatch (likely minimum window size constraint)")
                 print("[WindowManager]     App minimum width appears to be: \(finalState.size.width)")
@@ -342,14 +372,10 @@ class RealWindowManager: WindowManagerProtocol {
             print("[WindowManager]     Delta: w=\(finalState.size.width - targetSize.width), h=\(finalState.size.height - targetSize.height)")
         }
         if positionOK && sizeOK {
-            print("[WindowManager] ✓ Window frame set successfully")
+            print("[WindowManager] ✓ Window frame set successfully (after correction)")
         }
 
-        print("[WindowManager] ═══════════════════════════════════════════════")
-
-        // Consider it a success if position is correct, even if size hit minimum constraint
-        // (user can't make window smaller than app allows anyway)
-        let sizeAcceptable = sizeOK || (finalState.size.width >= targetSize.width && finalState.size.height >= targetSize.height - 5)
+        let sizeAcceptable = sizeOK || ResizeStateChecker.isMinimumConstraint(actual: finalState.size, target: targetSize)
         return positionOK && sizeAcceptable
     }
 
@@ -371,100 +397,6 @@ class RealWindowManager: WindowManagerProtocol {
         }
 
         return (position, size)
-    }
-
-    /// Set window size with verify-and-retry loop
-    /// Returns the actual achieved size and number of attempts made
-    private func setSizeWithRetry(_ axWindow: AXUIElement, targetSize: CGSize, maxAttempts: Int) -> (actualSize: CGSize, attempts: Int) {
-        var actualSize = CGSize.zero
-
-        for attempt in 1...maxAttempts {
-            var size = targetSize
-            if let sizeValue = AXValueCreate(.cgSize, &size) {
-                AXUIElementSetAttributeValue(axWindow, kAXSizeAttribute as CFString, sizeValue)
-            }
-
-            // Wait for the window to actually resize - longer wait for first attempt
-            let waitTime: UInt32 = attempt == 1 ? 40000 : 30000
-            usleep(waitTime)
-
-            // Read back the actual size
-            actualSize = readWindowState(axWindow).size
-
-            // Check if we achieved the target size using ResizeStateChecker
-            if ResizeStateChecker.isSizeOK(actual: actualSize, target: targetSize) {
-                return (actualSize, attempt)
-            }
-
-            // If size exceeds target, it's likely a minimum size constraint - don't retry
-            // Use a simplified check here (any dimension exceeding is enough to stop)
-            if actualSize.width > targetSize.width + ResizeStateChecker.exceedsThreshold ||
-               actualSize.height > targetSize.height + ResizeStateChecker.exceedsThreshold {
-                print("[WindowManager]     Size exceeded target (likely minimum constraint), not retrying")
-                return (actualSize, attempt)
-            }
-
-            // Wait a bit more before retry to let window settle
-            if attempt < maxAttempts {
-                usleep(20000)
-            }
-        }
-
-        return (actualSize, maxAttempts)
-    }
-
-    /// Set window position with verify-and-retry loop
-    /// Returns the actual achieved position and number of attempts made
-    private func setPositionWithRetry(_ axWindow: AXUIElement, targetPosition: CGPoint, maxAttempts: Int) -> (actualPosition: CGPoint, attempts: Int) {
-        var actualPosition = CGPoint.zero
-
-        for attempt in 1...maxAttempts {
-            var position = targetPosition
-            if let posValue = AXValueCreate(.cgPoint, &position) {
-                AXUIElementSetAttributeValue(axWindow, kAXPositionAttribute as CFString, posValue)
-            }
-
-            // Wait for the window to actually move
-            usleep(30000)
-
-            // Read back the actual position
-            actualPosition = readWindowState(axWindow).position
-
-            // Check if we achieved the target position using ResizeStateChecker
-            if ResizeStateChecker.isPositionOK(actual: actualPosition, target: targetPosition) {
-                return (actualPosition, attempt)
-            }
-
-            // Wait a bit more before retry
-            if attempt < maxAttempts {
-                usleep(20000)
-            }
-        }
-
-        return (actualPosition, maxAttempts)
-    }
-
-    /// Convert AXError to readable string
-    private func axErrorString(_ error: AXError) -> String {
-        switch error {
-        case .success: return "success"
-        case .failure: return "failure"
-        case .illegalArgument: return "illegalArgument"
-        case .invalidUIElement: return "invalidUIElement"
-        case .invalidUIElementObserver: return "invalidUIElementObserver"
-        case .cannotComplete: return "cannotComplete"
-        case .attributeUnsupported: return "attributeUnsupported"
-        case .actionUnsupported: return "actionUnsupported"
-        case .notificationUnsupported: return "notificationUnsupported"
-        case .notImplemented: return "notImplemented"
-        case .notificationAlreadyRegistered: return "notificationAlreadyRegistered"
-        case .notificationNotRegistered: return "notificationNotRegistered"
-        case .apiDisabled: return "apiDisabled"
-        case .noValue: return "noValue"
-        case .parameterizedAttributeUnsupported: return "parameterizedAttributeUnsupported"
-        case .notEnoughPrecision: return "notEnoughPrecision"
-        @unknown default: return "unknown(\(error.rawValue))"
-        }
     }
 
     /// Activate (bring to front) a window
