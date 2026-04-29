@@ -1125,6 +1125,9 @@ function __icon_map() {
    "Summoners War")
         icon_result=":summoners_war:"
         ;;
+   "Sunsama")
+        icon_result=":sunsama:"
+        ;;
    "superProductivity")
         icon_result=":superproductivity:"
         ;;
